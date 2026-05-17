@@ -2,6 +2,25 @@
 
 SKTAQ (Secure Keyword-aware Top-k Query) is a privacy-preserving spatial keyword query system supporting cloud-fog collaboration.
 
+## Demo Video
+
+A demonstration video of the SKTAQ privacy-preserving LBS system is available in the GitHub Release:
+
+[SKTAQ Privacy-Preserving LBS Demo Video](https://github.com/hx0-123/Search/releases/tag/demo-v1.0)
+
+The demo video presents the main workflow of the system, including:
+
+- Data owner upload and encrypted preprocessing
+- Secure index construction
+- User continuous spatial keyword Top-k query
+- Fog-side encrypted scoring
+- Cloud-side secure ranking
+- Safe-zone monitoring and result update
+- Frontend visualization
+
+The video is provided for project demonstration and evaluation purposes.  
+The source code, dataset verification files, and setup-related materials are available in this repository.
+
 ## Real Dataset Verification
 
 The SKTAQ demo system supports real spatial-textual dataset verification for datasets used in related studies, including:
