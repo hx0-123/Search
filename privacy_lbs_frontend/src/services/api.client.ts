@@ -1,6 +1,6 @@
 /**
- * Axios API客户端配置
- * 统一管理HTTP请求的配置和拦截器
+ * Axios API Client Configuration
+ * Unified management of HTTP request configuration and interceptors
  */
 
 import axios from 'axios';
@@ -10,33 +10,35 @@ import { handleApiError, showError } from '@/utils/error-handler.util';
 import type { ApiResponse } from '@/types';
 
 /**
- * 创建Axios实例
+ * Create Axios instance
  */
 const apiClient: AxiosInstance = axios.create({
   baseURL: env.apiBaseUrl,
-  timeout: 30000, // 30秒超时
+  timeout: 600000, // 10 minutes timeout (Paillier encryption of large datasets takes time)
   headers: {
     'Content-Type': 'application/json',
   },
 });
 
 /**
- * 请求拦截器
+ * Request interceptor
  */
 apiClient.interceptors.request.use(
   (config) => {
-    // 添加JWT Token（如果已实现用户认证）
+    // Add JWT Token (if user authentication is implemented)
     const token = localStorage.getItem('jwt_token') || localStorage.getItem('token');
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
     
-    // 开发环境下打印请求信息
+    // Print request info in development environment (defer to avoid blocking)
     if (env.isDev) {
-      console.log(`[API Request] ${config.method?.toUpperCase()} ${config.url}`, {
-        params: config.params,
-        data: config.data,
-      });
+      setTimeout(() => {
+        console.log(`[API Request] ${config.method?.toUpperCase()} ${config.url}`, {
+          params: config.params,
+          data: config.data,
+        });
+      }, 0);
     }
     
     return config;
@@ -48,34 +50,36 @@ apiClient.interceptors.request.use(
 );
 
 /**
- * 响应拦截器
+ * Response interceptor
  */
 apiClient.interceptors.response.use(
   (response: AxiosResponse<ApiResponse>) => {
-    // 开发环境下打印响应信息
+    // Print response info in development environment (defer to avoid blocking)
     if (env.isDev) {
-      console.log(`[API Response] ${response.config.url}`, response.data);
+      setTimeout(() => {
+        console.log(`[API Response] ${response.config.url}`, response.data);
+      }, 0);
     }
     
-    // 如果后端返回的数据结构是 { success, data, message }
+    // If backend returns data structure { success, data, message }
     if (response.data && typeof response.data === 'object' && 'success' in response.data) {
       if (!response.data.success) {
-        // 后端返回了错误
-        const error = new Error(response.data.message || response.data.error || '请求失败');
+        // Backend returned error
+        const error = new Error(response.data.message || response.data.error || 'Request failed');
         return Promise.reject(error);
       }
-      // 返回data字段
+      // Return data field
       return response.data.data !== undefined ? response.data.data : response.data;
     }
     
-    // 直接返回响应数据
+    // Directly return response data
     return response.data;
   },
   (error: AxiosError<ApiResponse>) => {
-    // 使用统一的错误处理
+    // Use unified error handling
     const errorInfo = handleApiError(error);
     
-    // 显示用户友好的错误提示
+    // Show user-friendly error prompt
     showError(errorInfo);
     
     return Promise.reject(error);
@@ -83,12 +87,12 @@ apiClient.interceptors.response.use(
 );
 
 /**
- * 导出配置好的API客户端
+ * Export configured API client
  */
 export default apiClient;
 
 /**
- * 导出常用的HTTP方法
+ * Export common HTTP methods
  */
 export const api = {
   get: <T = any>(url: string, config?: AxiosRequestConfig): Promise<T> => {

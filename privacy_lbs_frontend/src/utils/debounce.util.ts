@@ -1,14 +1,14 @@
 /**
- * 防抖工具函数
- * 用于限制函数调用频率
+ * Debounce utility functions
+ * Used to limit function call frequency
  */
 
 /**
- * 防抖函数
- * @param func 要防抖的函数
- * @param wait 等待时间（毫秒）
- * @param immediate 是否立即执行
- * @returns 防抖后的函数
+ * Debounce function
+ * @param func Function to debounce
+ * @param wait Wait time (milliseconds)
+ * @param immediate Whether to execute immediately
+ * @returns Debounced function
  */
 export function debounce<T extends (...args: any[]) => any>(
   func: T,
@@ -36,10 +36,10 @@ export function debounce<T extends (...args: any[]) => any>(
 }
 
 /**
- * 节流函数
- * @param func 要节流的函数
- * @param limit 时间限制（毫秒）
- * @returns 节流后的函数
+ * Throttle function
+ * @param func Function to throttle
+ * @param limit Time limit (milliseconds)
+ * @returns Throttled function
  */
 export function throttle<T extends (...args: any[]) => any>(
   func: T,

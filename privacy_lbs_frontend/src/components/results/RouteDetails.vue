@@ -1,44 +1,44 @@
 <!--
-  路线详情抽屉组件
-  显示路线规划的详细信息
+  Route Details Drawer Component
+  Displays detailed route planning information
 -->
 <template>
   <el-drawer
     v-model="visible"
-    title="路线规划详情"
+    title="Route Planning Details"
     :size="400"
     direction="rtl"
   >
     <div v-if="routePlan" class="route-details">
-      <!-- 路线概览 -->
+      <!-- Route Overview -->
       <el-card class="route-overview">
         <template #header>
-          <span>路线概览</span>
+          <span>Route Overview</span>
         </template>
         <div class="overview-item">
           <el-icon><Location /></el-icon>
-          <span>总距离: {{ formatDistance(routePlan.totalDistance) }}</span>
+          <span>Total Distance: {{ formatDistance(routePlan.totalDistance) }}</span>
         </div>
         <div class="overview-item">
           <el-icon><Clock /></el-icon>
-          <span>预计时间: {{ formatTime(routePlan.totalTime) }}</span>
+          <span>Estimated Time: {{ formatTime(routePlan.totalTime) }}</span>
         </div>
         <div class="overview-item">
           <el-icon><Guide /></el-icon>
-          <span>途经点: {{ routePlan.waypoints.length }} 个</span>
+          <span>Waypoints: {{ routePlan.waypoints.length }}</span>
         </div>
       </el-card>
       
-      <!-- 途经点列表 -->
+      <!-- Waypoints List -->
       <el-card class="waypoints-list">
         <template #header>
-          <span>途经点</span>
+          <span>Waypoints</span>
         </template>
         <el-timeline>
           <el-timeline-item
             v-for="(waypoint, index) in routePlan.waypoints"
             :key="waypoint.id"
-            :timestamp="`第 ${index + 1} 站`"
+            :timestamp="`Stop ${index + 1}`"
             placement="top"
           >
             <div class="waypoint-item">
@@ -51,10 +51,10 @@
         </el-timeline>
       </el-card>
       
-      <!-- 路线步骤 -->
+      <!-- Detailed Steps -->
       <el-card class="route-steps" v-if="routePlan.steps && routePlan.steps.length > 0">
         <template #header>
-          <span>详细步骤</span>
+          <span>Detailed Steps</span>
         </template>
         <el-collapse>
           <el-collapse-item
@@ -66,8 +66,8 @@
             <div class="step-details">
               <div class="step-info">
                 <el-text type="info" size="small">
-                  距离: {{ formatDistance(step.distance) }} | 
-                  时间: {{ formatTime(step.duration) }}
+                  Distance: {{ formatDistance(step.distance) }} | 
+                  Time: {{ formatTime(step.duration) }}
                 </el-text>
               </div>
             </div>
@@ -75,25 +75,25 @@
         </el-collapse>
       </el-card>
       
-      <!-- 操作按钮 -->
+      <!-- Action Buttons -->
       <div class="route-actions">
         <el-button type="primary" @click="handleShowOnMap" style="width: 100%">
-          在地图上显示
+          Show on Map
         </el-button>
         <el-button @click="handleExport" style="width: 100%; margin-top: 8px">
-          导出路线
+          Export Route
         </el-button>
       </div>
     </div>
     
     <div v-else class="empty-route">
-      <el-empty description="暂无路线规划" />
+      <el-empty description="No route plan available" />
     </div>
   </el-drawer>
 </template>
 
 <script setup lang="ts">
-import { ref, watch } from 'vue';
+import { ref, onMounted, onUnmounted, computed } from 'vue';
 import { ElMessage } from 'element-plus';
 import { Location, Clock, Guide } from '@element-plus/icons-vue';
 import { useResultStore } from '@/stores/result.store';
@@ -105,47 +105,97 @@ const resultStore = useResultStore();
 const mapStore = useMapStore();
 
 const visible = ref(false);
-const routePlan = ref<RoutePlan | null>(null);
 
-// 监听store中的路线规划
-watch(
-  () => resultStore.routePlan,
-  (plan) => {
-    routePlan.value = plan;
-    if (plan) {
+// Use computed instead of watch to avoid blocking
+const routePlan = computed(() => resultStore.routePlan);
+
+// Listen for routePlan changes asynchronously
+let checkTimer: number | null = null;
+
+function checkRoutePlan() {
+  if (checkTimer) {
+    clearTimeout(checkTimer);
+  }
+  
+  checkTimer = window.setTimeout(() => {
+    if (routePlan.value) {
       visible.value = true;
     }
+    checkTimer = null;
+  }, 100);
+}
+
+onMounted(() => {
+  console.log('[RouteDetails] Component mounted');
+  
+  // Periodically check routePlan (lightweight polling to avoid watch blocking)
+  const pollInterval = setInterval(() => {
+    if (routePlan.value && !visible.value) {
+      checkRoutePlan();
+    }
+  }, 500);
+  
+  // Save interval ID for cleanup
+  (onUnmounted as any).pollInterval = pollInterval;
+});
+
+onUnmounted(() => {
+  console.log('[RouteDetails] Component unmounting');
+  
+  if (checkTimer) {
+    clearTimeout(checkTimer);
+    checkTimer = null;
   }
-);
+  
+  // Cleanup polling
+  const pollInterval = (onUnmounted as any).pollInterval;
+  if (pollInterval) {
+    clearInterval(pollInterval);
+  }
+});
 
 function formatTime(seconds: number): string {
   const hours = Math.floor(seconds / 3600);
   const minutes = Math.floor((seconds % 3600) / 60);
   
   if (hours > 0) {
-    return `${hours}小时${minutes}分钟`;
+    return `${hours} hours ${minutes} minutes`;
   } else {
-    return `${minutes}分钟`;
+    return `${minutes} minutes`;
   }
 }
 
 function handleShowOnMap() {
-  if (routePlan.value && routePlan.value.polyline.length > 0) {
-    // 在地图上显示路线
-    // 这里可以调用地图store的方法来显示路线
-    const center = routePlan.value.polyline[Math.floor(routePlan.value.polyline.length / 2)];
-    mapStore.setCenter(center[0], center[1]);
-    mapStore.setZoom(13);
-    
-    // TODO: 在地图上绘制路线折线
-    ElMessage.success('路线已显示在地图上');
+  if (!routePlan.value || !routePlan.value.polyline || routePlan.value.polyline.length === 0) {
+    ElMessage.warning('No route data available');
+    return;
   }
+  
+  // Execute map operations asynchronously to avoid blocking
+  setTimeout(() => {
+    try {
+      const center = routePlan.value!.polyline[Math.floor(routePlan.value!.polyline.length / 2)];
+    mapStore.setCenter(center[0], center[1]);
+      
+      setTimeout(() => {
+    mapStore.setZoom(13);
+    ElMessage.success('Route displayed on map');
+      }, 100);
+    } catch (error) {
+      console.error('[RouteDetails] Failed to show route:', error);
+      ElMessage.error('Failed to display route on map');
+  }
+  }, 100);
 }
 
 function handleExport() {
-  if (!routePlan.value) return;
+  if (!routePlan.value) {
+    ElMessage.warning('No route data available for export');
+    return;
+  }
   
-  // 导出路线为JSON
+  try {
+  // Export route as JSON
   const dataStr = JSON.stringify(routePlan.value, null, 2);
   const dataBlob = new Blob([dataStr], { type: 'application/json' });
   const url = URL.createObjectURL(dataBlob);
@@ -155,7 +205,11 @@ function handleExport() {
   link.click();
   URL.revokeObjectURL(url);
   
-  ElMessage.success('路线已导出');
+  ElMessage.success('Route exported successfully');
+  } catch (error) {
+    console.error('[RouteDetails] Failed to export route:', error);
+      ElMessage.error('Failed to export route');
+  }
 }
 </script>
 

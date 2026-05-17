@@ -1,6 +1,6 @@
 /**
- * 查询结果状态管理
- * 管理查询结果、排序、筛选等
+ * Query Result State Management
+ * Manages query results, sorting, filtering, etc.
  */
 
 import { defineStore } from 'pinia';
@@ -11,127 +11,207 @@ export type SortField = 'score' | 'distance' | 'name';
 export type SortOrder = 'asc' | 'desc';
 
 export const useResultStore = defineStore('result', () => {
-  // 查询结果列表
+  // Query results list
   const results = ref<QueryResult[]>([]);
   
-  // Top-K结果（别名，与results同步）
+  // Top-K results (alias, synchronized with results)
   const topKResults = computed(() => results.value);
   
-  // 当前选中的结果
+  // Currently selected result
   const selectedResult = ref<QueryResult | null>(null);
   
-  // 选中的路线（别名，与routePlan同步）
+  // Selected route (alias, synchronized with routePlan)
   const selectedRoute = computed(() => routePlan.value);
   
-  // 路线规划结果
+  // Route planning result
   const routePlan = ref<RoutePlan | null>(null);
   
-  // 排序字段
+  // Sort field
   const sortField = ref<SortField>('score');
   
-  // 排序顺序
+  // Sort order
   const sortOrder = ref<SortOrder>('desc');
   
-  // 筛选关键词
+  // Filter keyword
   const filterKeyword = ref<string>('');
   
-  // 计算属性：排序后的结果
+  // Computed property: Sorted results
+  // FIX: Removed manual cache variables — they break Vue's reactivity tracking.
+  // Vue's computed() already memoises by dependency; a manual cache on top
+  // causes the watcher in ResultMarkerLayer to miss updates when the array
+  // contents change but the cached length happens to match.
   const sortedResults = computed(() => {
-    let filtered = [...results.value];
-    
-    // 应用筛选
-    if (filterKeyword.value.trim()) {
-      const keyword = filterKeyword.value.toLowerCase();
-      filtered = filtered.filter(result =>
-        result.spatialObject.name.toLowerCase().includes(keyword) ||
-        result.spatialObject.description?.toLowerCase().includes(keyword) ||
-        result.spatialObject.category?.toLowerCase().includes(keyword)
+    const sourceResults = results.value;
+    if (!sourceResults || sourceResults.length === 0) return [];
+
+    const currentSortField = sortField.value;
+    const currentSortOrder = sortOrder.value;
+    const currentFilterKeyword = filterKeyword.value?.trim() || '';
+
+    let filtered = sourceResults.slice(0, 50);
+
+    if (currentFilterKeyword) {
+      const keywordLower = currentFilterKeyword.toLowerCase();
+      filtered = filtered.filter(r =>
+        r?.spatialObject?.name?.toLowerCase().includes(keywordLower)
       );
     }
-    
-    // 应用排序
-    filtered.sort((a, b) => {
-      let comparison = 0;
-      
-      switch (sortField.value) {
-        case 'score':
-          comparison = a.score - b.score;
-          break;
-        case 'distance':
-          comparison = a.distance - b.distance;
-          break;
-        case 'name':
-          comparison = a.spatialObject.name.localeCompare(b.spatialObject.name);
-          break;
-      }
-      
-      return sortOrder.value === 'asc' ? comparison : -comparison;
-    });
-    
-    return filtered;
+
+    if (filtered.length > 1) {
+      filtered = [...filtered].sort((a, b) => {
+        let cmp = 0;
+        switch (currentSortField) {
+          case 'score':    cmp = (a.score || 0) - (b.score || 0); break;
+          case 'distance': cmp = (a.distance || 0) - (b.distance || 0); break;
+          case 'name': {
+            const na = a.spatialObject?.name || '';
+            const nb = b.spatialObject?.name || '';
+            cmp = na.localeCompare(nb);
+            break;
+          }
+        }
+        return currentSortOrder === 'asc' ? cmp : -cmp;
+      });
+    }
+
+    return filtered.slice(0, 30);
   });
   
-  // 计算属性：结果数量
+  // Computed property: Result count
   const resultCount = computed(() => {
     return results.value.length;
   });
   
-  // 计算属性：是否有结果
+  // Computed property: Whether there are results
   const hasResults = computed(() => {
     return results.value.length > 0;
   });
   
   /**
-   * 设置查询结果
+   * Set query results (optimized: avoid blocking main thread)
    */
   function setResults(newResults: QueryResult[]) {
-    results.value = newResults;
-    // 默认选中第一个结果
-    if (newResults.length > 0 && !selectedResult.value) {
-      selectedResult.value = newResults[0];
+    // Render max 50 results to prevent rAF loop blocking main thread
+    const MAX_RESULTS = 50;
+    if (newResults.length > MAX_RESULTS) {
+      console.warn(`[ResultStore] Truncating ${newResults.length} results to ${MAX_RESULTS}`);
+      newResults = newResults.slice(0, MAX_RESULTS);
     }
+    console.log('[ResultStore] setResults called with', newResults.length, 'results');
+    
+    // CRITICAL: Early return for empty arrays to avoid unnecessary async operations
+    if (!newResults || newResults.length === 0) {
+      console.log('[ResultStore] Clearing results (empty array)');
+      results.value = [];
+      selectedResult.value = null;
+      return;
+    }
+    
+    console.log('[ResultStore] First new result:', newResults[0]);
+    
+    // For small arrays, update synchronously to avoid async overhead
+    if (newResults.length <= 10) {
+      console.log('[ResultStore] Setting results synchronously (small array)');
+      results.value = [...newResults];
+      if (!selectedResult.value && newResults.length > 0) {
+        selectedResult.value = newResults[0] ?? null;
+      }
+      return;
+    }
+    
+    // For large arrays, use batch processing to avoid blocking
+    console.log('[ResultStore] Setting results with batch processing (large array)');
+    
+    // Clear old results synchronously first
+    results.value = [];
+    selectedResult.value = null;
+    
+    // Add new results in batches
+    const BATCH_SIZE = 50;
+    let index = 0;
+    let batchTimer: number | null = null;
+    
+    function addBatch() {
+      if (batchTimer) {
+        cancelAnimationFrame(batchTimer);
+        batchTimer = null;
+      }
+      
+      const endIndex = Math.min(index + BATCH_SIZE, newResults.length);
+      const batch = newResults.slice(index, endIndex);
+      
+      // Use push instead of spread to avoid creating new array
+      for (const item of batch) {
+        results.value.push(item);
+      }
+      
+      index = endIndex;
+      
+      if (index < newResults.length) {
+        // Use requestAnimationFrame for next batch
+        batchTimer = requestAnimationFrame(addBatch);
+      } else {
+        // All results added, select first by default
+        if (newResults.length > 0 && !selectedResult.value) {
+          selectedResult.value = newResults[0] ?? null;
+        }
+        console.log('[ResultStore] Batch processing completed, total:', results.value.length);
+        batchTimer = null;
+      }
+    }
+    
+    // Start adding batches after a small delay to ensure UI can render
+    batchTimer = requestAnimationFrame(() => {
+      requestAnimationFrame(addBatch);
+    });
   }
   
   /**
-   * 添加结果（用于增量更新）
+   * Add results (for incremental updates)
    */
   function addResults(newResults: QueryResult[]) {
-    // 合并结果，去重
+    // Merge results, remove duplicates
     const existingIds = new Set(results.value.map(r => r.id));
     const uniqueNewResults = newResults.filter(r => !existingIds.has(r.id));
     results.value = [...results.value, ...uniqueNewResults];
   }
   
   /**
-   * 更新结果（用于实时更新）
+   * Update results (for real-time updates)
    */
   function updateResults(newResults: QueryResult[]) {
-    // 更新现有结果，添加新结果
-    const resultMap = new Map(results.value.map(r => [r.id, r]));
+    console.log('[ResultStore] updateResults called with', newResults.length, 'results');
     
-    for (const newResult of newResults) {
-      resultMap.set(newResult.id, newResult);
+    // For real-time updates, replace all results instead of merging
+    if (newResults && newResults.length > 0) {
+      console.log('[ResultStore] Replacing results with new data');
+      console.log('[ResultStore] First new result:', newResults[0]);
+      
+      // Replace results directly
+      results.value = [...newResults];
+      
+      console.log('[ResultStore] Results updated, new count:', results.value.length);
+    } else {
+      console.warn('[ResultStore] No new results to update');
     }
-    
-    results.value = Array.from(resultMap.values());
   }
   
   /**
-   * 设置选中的结果
+   * Set selected result
    */
   function setSelectedResult(result: QueryResult | null) {
     selectedResult.value = result;
   }
   
   /**
-   * 设置路线规划
+   * Set route plan
    */
   function setRoutePlan(plan: RoutePlan | null) {
     routePlan.value = plan;
   }
   
   /**
-   * 设置排序
+   * Set sort
    */
   function setSort(field: SortField, order: SortOrder = 'desc') {
     sortField.value = field;
@@ -139,35 +219,35 @@ export const useResultStore = defineStore('result', () => {
   }
   
   /**
-   * 切换排序顺序
+   * Toggle sort order
    */
   function toggleSortOrder() {
     sortOrder.value = sortOrder.value === 'asc' ? 'desc' : 'asc';
   }
   
   /**
-   * 设置筛选关键词
+   * Set filter keyword
    */
   function setFilterKeyword(keyword: string) {
     filterKeyword.value = keyword;
   }
   
   /**
-   * 清空筛选
+   * Clear filter
    */
   function clearFilter() {
     filterKeyword.value = '';
   }
   
   /**
-   * 根据ID获取结果
+   * Get result by ID
    */
   function getResultById(id: string): QueryResult | undefined {
     return results.value.find(r => r.id === id);
   }
   
   /**
-   * 清空结果
+   * Clear results
    */
   function clearResults() {
     results.value = [];
@@ -176,7 +256,7 @@ export const useResultStore = defineStore('result', () => {
   }
   
   /**
-   * 重置状态
+   * Reset state
    */
   function reset() {
     clearResults();
@@ -186,20 +266,20 @@ export const useResultStore = defineStore('result', () => {
   }
   
   return {
-    // 状态
+    // State
     results,
-    topKResults, // 导出topKResults别名
+    topKResults, // Export topKResults alias
     selectedResult,
-    selectedRoute, // 导出selectedRoute别名
+    selectedRoute, // Export selectedRoute alias
     routePlan,
     sortField,
     sortOrder,
     filterKeyword,
-    // 计算属性
+    // Computed properties
     sortedResults,
     resultCount,
     hasResults,
-    // 方法
+    // Methods
     setResults,
     addResults,
     updateResults,

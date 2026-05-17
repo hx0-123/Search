@@ -1,124 +1,98 @@
 /**
- * 数据服务
- * 处理数据上传和其他数据相关服务
- * 注意：这个服务主要用于数据拥有者上传数据
+ * Data Service
+ * Backend data upload (CSV adapter) and statistics API
  */
+import { api } from './api.client'
 
-import api from './api.client';
-import type { ApiResponse } from '@/types';
+// ── Type Definitions ────────────────────────────────────────────
+export interface StatisticsResponse {
+  total_objects: number
+  data_owner_count: number
+  last_upload_time: string | null
+  index: {
+    build_status: 'not_started' | 'building' | 'completed' | 'failed'
+    ktree_depth: number
+    ktree_node_count: number
+    ktree_leaf_count: number
+    assettree_size: number
+    build_completed_at: string | null
+    spatial_domain: {
+      x_min: number
+      x_max: number
+      y_min: number
+      y_max: number
+    }
+  } | null
+  keypair: {
+    key_size: number
+    public_key_digest: string
+    created_at: string
+    gen_time_ms: number
+  } | null
+}
+
+export interface UploadResult {
+  message: string
+  owner_id: string
+  objects_count: number
+  index_built: boolean
+  parsed_rows: number
+  skipped_rows: number
+  parse_warnings?: string[]
+  index_metadata?: {
+    ktree_depth: number
+    ktree_node_count: number
+    ktree_leaf_count: number
+    assettree_size: number
+  }
+}
 
 /**
- * 上传数据文件
- * @param file 数据文件（CSV、JSON等）
- * @param onProgress 上传进度回调
- * @returns 上传结果
+ * CSV file upload (calls adapter endpoint)
+ * POST /api/data_owner/upload/
+ *
+ * @param file       .csv file
+ * @param onProgress Upload progress callback 0-100
+ * @param ownerId    Data owner ID (default: default_owner)
  */
-export async function uploadDataFile(
+export async function uploadCSV(
   file: File,
-  onProgress?: (progress: number) => void
-): Promise<{
-  taskId: string;
-  message: string;
-}> {
-  try {
-    const formData = new FormData();
-    formData.append('file', file);
-    
-    const response = await api.post<{
-      taskId: string;
-      message: string;
-    }>('/data_owner/upload/', formData, {
-      headers: {
-        'Content-Type': 'multipart/form-data',
-      },
-      onUploadProgress: (progressEvent) => {
-        if (progressEvent.total && onProgress) {
-          const progress = Math.round(
-            (progressEvent.loaded * 100) / progressEvent.total
-          );
-          onProgress(progress);
-        }
-      },
-    });
-    
-    return response;
-  } catch (error) {
-    console.error('上传数据文件失败:', error);
-    throw error;
-  }
+  onProgress?: (pct: number) => void,
+  ownerId = 'default_owner',
+): Promise<UploadResult> {
+  // Backend automatically detects active KeyPair, no need to attach public key
+  const formData = new FormData()
+  formData.append('file', file)
+  formData.append('owner_id', ownerId)
+
+  const res = await api.post<UploadResult>('/data_owner/upload/', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+    timeout: 600000, // 10 minutes: Paillier encryption of large datasets takes time
+    onUploadProgress: (evt) => {
+      if (evt.total && onProgress) {
+        onProgress(Math.round((evt.loaded / evt.total) * 100))
+      }
+    },
+  })
+  return res as unknown as UploadResult
 }
 
 /**
- * 获取上传任务状态
- * @param taskId 任务ID
- * @returns 任务状态
+ * Get data statistics
+ * GET /api/data/statistics/
  */
-export async function getUploadTaskStatus(taskId: string): Promise<{
-  status: 'pending' | 'processing' | 'completed' | 'failed';
-  progress: number;
-  message?: string;
-  result?: {
-    totalRecords: number;
-    encryptedRecords: number;
-    indexBuilt: boolean;
-  };
-}> {
-  try {
-    const response = await api.get(`/data_owner/upload/${taskId}/status/`);
-    return response;
-  } catch (error) {
-    console.error('获取上传任务状态失败:', error);
-    throw error;
-  }
+export async function getDataStatistics(): Promise<StatisticsResponse> {
+  const res = await api.get<StatisticsResponse>('/data/statistics/')
+  return res as unknown as StatisticsResponse
 }
 
 /**
- * 获取数据统计信息
- * @returns 数据统计
+ * Validate CSV file format (frontend only)
  */
-export async function getDataStatistics(): Promise<{
-  totalObjects: number;
-  totalCategories: number;
-  lastUpdateTime: string;
-}> {
-  try {
-    const response = await api.get('/data_owner/statistics/');
-    return response;
-  } catch (error) {
-    console.error('获取数据统计失败:', error);
-    throw error;
-  }
+export function validateDataFile(file: File): { valid: boolean; errors: string[] } {
+  const errors: string[] = []
+  const maxSize = 100 * 1024 * 1024 // 100 MB
+  if (file.size > maxSize) errors.push(`File size exceeds limit (max ${maxSize / 1024 / 1024} MB)`)
+  if (!file.name.toLowerCase().endsWith('.csv')) errors.push('Only .csv format is supported')
+  return { valid: errors.length === 0, errors }
 }
-
-/**
- * 验证数据文件格式
- * @param file 数据文件
- * @returns 验证结果
- */
-export function validateDataFile(file: File): {
-  valid: boolean;
-  errors: string[];
-} {
-  const errors: string[] = [];
-  const maxSize = 100 * 1024 * 1024; // 100MB
-  const allowedTypes = [
-    'text/csv',
-    'application/json',
-    'application/vnd.ms-excel',
-    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-  ];
-  
-  if (file.size > maxSize) {
-    errors.push(`文件大小超过限制（最大${maxSize / 1024 / 1024}MB）`);
-  }
-  
-  if (!allowedTypes.includes(file.type) && !file.name.endsWith('.csv') && !file.name.endsWith('.json')) {
-    errors.push('不支持的文件格式，请上传CSV或JSON文件');
-  }
-  
-  return {
-    valid: errors.length === 0,
-    errors,
-  };
-}
-

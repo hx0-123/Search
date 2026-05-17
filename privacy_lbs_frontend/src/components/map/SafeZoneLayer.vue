@@ -1,169 +1,206 @@
 <!--
-  安全区域图层组件
-  在地图上绘制安全区域
+  Safe Zone Layer Component
+  Rendered using HTML Marker, no GPU/WebGL dependency
+  Supports dynamic resizing based on map zoom level
 -->
 <template>
-  <!-- 此组件通过地图store和地图实例来渲染，不需要模板 -->
+  <!-- Render circle using HTML elements, no WebGL dependency -->
 </template>
 
 <script setup lang="ts">
-import { watch, onMounted, onUnmounted } from 'vue';
+import { ref, onMounted, onUnmounted, watch } from 'vue';
 import mapboxgl from 'mapbox-gl';
 import { useMapStore } from '@/stores/map.store';
-import { useQueryStore } from '@/stores/query.store';
-import { calculateDestination } from '@/utils/coordinate.util';
+import { eventBus, Events } from '@/utils/event-bus';
 
 const mapStore = useMapStore();
-const queryStore = useQueryStore();
+let currentMarker: mapboxgl.Marker | null = null;
+let currentSafeZone: {
+  center: { longitude: number; latitude: number };
+  radius: number;
+} | null = null;
 
-let sourceId = 'safe-zone';
-let layerId = 'safe-zone-layer';
+/**
+ * Convert meters to pixels (based on current zoom level and latitude)
+ */
+function metersToPixels(meters: number, latitude: number, zoom: number): number {
+  // Mapbox pixel calculation formula
+  // At zoom level 0, 1 pixel = 156543.03392 meters at equator
+  const metersPerPixel = 156543.03392 * Math.cos(latitude * Math.PI / 180) / Math.pow(2, zoom);
+  return meters / metersPerPixel;
+}
 
-function updateSafeZoneLayer() {
-  const map = mapStore.mapInstance;
-  if (!map || !mapStore.isMapLoaded) return;
-  
-  const safeZone = mapStore.safeZone;
-  
-  // 获取或创建数据源
-  let source = map.getSource(sourceId) as mapboxgl.GeoJSONSource;
-  
-  if (!source) {
-    // 创建数据源
-    map.addSource(sourceId, {
-      type: 'geojson',
-      data: {
-        type: 'Feature',
-        geometry: {
-          type: 'Polygon',
-          coordinates: [],
-        },
-      },
-    });
-    
-    source = map.getSource(sourceId) as mapboxgl.GeoJSONSource;
-    
-    // 创建填充图层
-    map.addLayer({
-      id: layerId,
-      type: 'fill',
-      source: sourceId,
-      paint: {
-        'fill-color': '#ef4444',
-        'fill-opacity': 0.2,
-      },
-    });
-    
-    // 创建边框图层
-    map.addLayer({
-      id: `${layerId}-border`,
-      type: 'line',
-      source: sourceId,
-      paint: {
-        'line-color': '#ef4444',
-        'line-width': 2,
-        'line-opacity': 0.8,
-      },
-    });
+/**
+ * Update circle size (based on current zoom level)
+ */
+function updateCircleSize() {
+  if (!currentMarker || !currentSafeZone) {
+    return;
   }
   
-  // 更新数据 - 优先使用mapStore中的安全区域，如果没有则使用queryStore中的
-  const safeZoneData = safeZone || queryStore.safeZone;
+  const map = mapStore.mapInstance;
+  if (!map) {
+    return;
+  }
   
-  if (safeZoneData) {
-    let polygon: [number, number][];
+  const zoom = map.getZoom();
+  const pixelRadius = metersToPixels(
+    currentSafeZone.radius,
+    currentSafeZone.center.latitude,
+    zoom
+  );
+  
+  // Get marker element and update size
+  const el = currentMarker.getElement();
+  const size = pixelRadius * 2; // Diameter
+  
+  el.style.width = `${size}px`;
+  el.style.height = `${size}px`;
+  
+  console.log(`[SafeZoneLayer] Updated circle size: ${size}px (zoom: ${zoom.toFixed(2)})`);
+}
+
+/**
+ * Render safe zone using HTML Marker
+ * No GPU/WebGL dependency
+ */
+function updateSafeZoneLayer(safeZoneData?: {
+  center: { longitude: number; latitude: number };
+  radius?: number;
+  polygon?: [number, number][];
+} | null) {
+  console.log('[SafeZoneLayer] === updateSafeZoneLayer START (HTML Mode) ===');
+  
+  const map = mapStore.mapInstance;
+  if (!map || !mapStore.isMapLoaded) {
+    console.log('[SafeZoneLayer] Map not ready, aborting');
+    return;
+  }
+  
+  console.log('[SafeZoneLayer] Map is ready');
+  console.log('[SafeZoneLayer] Safe zone data:', safeZoneData);
+  
+  try {
+    // Clean up old marker and zoom listener
+    if (currentMarker) {
+      console.log('[SafeZoneLayer] Removing old marker');
+      const oldMap = mapStore.mapInstance;
+      if (oldMap) oldMap.off('zoom', updateCircleSize);
+      currentMarker.remove();
+      currentMarker = null;
+      currentSafeZone = null;
+    }
     
-    // 如果已有多边形数据，直接使用
-    if (safeZoneData.polygon && safeZoneData.polygon.length > 0) {
-      polygon = safeZoneData.polygon;
-    } else if (safeZoneData.radius) {
-      // 如果有半径，生成圆形多边形
-      const center: [number, number] = [
-        safeZoneData.center.longitude,
-        safeZoneData.center.latitude,
-      ];
-      const radius = safeZoneData.radius;
-      
-      // 生成圆形多边形（使用32个点）
-      const points: [number, number][] = [];
-      for (let i = 0; i < 32; i++) {
-        const angle = (i / 32) * 360;
-        const point = calculateDestination(center, radius || 1000, angle);
-        points.push(point);
-      }
-      // 闭合多边形
-      points.push(points[0]);
-      polygon = points;
-    } else {
-      // 没有有效数据，清空
-      source.setData({
-        type: 'Feature',
-        geometry: {
-          type: 'Polygon',
-          coordinates: [],
-        },
-      });
+    // Return if no data
+    if (!safeZoneData || !safeZoneData.center || !safeZoneData.radius) {
+      console.log('[SafeZoneLayer] No valid data');
       return;
     }
     
-    source.setData({
-      type: 'Feature',
-      geometry: {
-        type: 'Polygon',
-        coordinates: [polygon],
-      },
-      properties: {
-        name: (safeZoneData as any).name || '安全区域',
+    console.log('[SafeZoneLayer] Creating HTML marker...');
+    console.log('[SafeZoneLayer] Center:', safeZoneData.center);
+    console.log('[SafeZoneLayer] Radius:', safeZoneData.radius, 'meters');
+    
+    // Save current safe zone data
+    currentSafeZone = {
+      center: safeZoneData.center,
         radius: safeZoneData.radius,
-      },
-    });
-  } else {
-    source.setData({
-      type: 'Feature',
-      geometry: {
-        type: 'Polygon',
-        coordinates: [],
-      },
-    });
+    };
+    
+    // Calculate initial pixel size
+    const zoom = map.getZoom();
+    const pixelRadius = metersToPixels(
+      safeZoneData.radius,
+      safeZoneData.center.latitude,
+      zoom
+    );
+    const size = pixelRadius * 2; // Diameter
+    
+    console.log('[SafeZoneLayer] Initial size:', size, 'px at zoom', zoom.toFixed(2));
+    
+    // Create HTML element
+    const el = document.createElement('div');
+    el.className = 'safe-zone-marker';
+    el.style.width = `${size}px`;
+    el.style.height = `${size}px`;
+    el.style.borderRadius = '50%';
+    el.style.backgroundColor = 'rgba(239, 68, 68, 0.2)';
+    el.style.border = '2px solid rgba(239, 68, 68, 0.8)';
+    el.style.pointerEvents = 'none';
+    el.style.transition = 'width 0.2s ease, height 0.2s ease'; // Smooth transition
+    
+    // Create Marker (using HTML element, no WebGL dependency)
+    currentMarker = new mapboxgl.Marker({
+      element: el,
+      anchor: 'center',
+    })
+      .setLngLat([safeZoneData.center.longitude, safeZoneData.center.latitude])
+      .addTo(map);
+        
+    // Listen to map zoom event for dynamic resizing
+    map.on('zoom', updateCircleSize);
+    
+    console.log('[SafeZoneLayer] HTML marker created successfully');
+    console.log('[SafeZoneLayer] === SUCCESS ===');
+  } catch (error) {
+    console.error('[SafeZoneLayer] === ERROR ===', error);
   }
 }
 
-// 监听安全区域变化（同时监听mapStore和queryStore）
-watch(
-  () => [mapStore.safeZone, queryStore.safeZone],
-  () => {
-    updateSafeZoneLayer();
-  },
-  { deep: true }
-);
+// Event handler functions
+const handleSafeZoneUpdate = (safeZoneData: any) => {
+  console.log('[SafeZoneLayer] === Event Received (HTML Mode) ===');
+  console.log('[SafeZoneLayer] Data:', JSON.stringify(safeZoneData));
 
-// 监听地图加载
-watch(
-  () => mapStore.isMapLoaded,
-  (loaded) => {
-    if (loaded) {
-      updateSafeZoneLayer();
+  // Delay execution to avoid blocking
+  setTimeout(() => {
+    if (!mapStore.isMapLoaded || !mapStore.mapInstance) {
+      console.log('[SafeZoneLayer] Map not ready, skipping update');
+      return;
     }
-  }
-);
+    
+    try {
+      console.log('[SafeZoneLayer] Calling updateSafeZoneLayer...');
+      updateSafeZoneLayer(safeZoneData);
+      console.log('[SafeZoneLayer] updateSafeZoneLayer completed');
+    } catch (error) {
+      console.error('[SafeZoneLayer] Error in updateSafeZoneLayer:', error);
+    }
+  }, 100);
+};
 
 onMounted(() => {
-  if (mapStore.isMapLoaded) {
-    updateSafeZoneLayer();
-  }
+  console.log('[SafeZoneLayer] Component mounted (HTML Mode with dynamic sizing)');
+  
+  // Subscribe to safe zone update event
+  eventBus.on(Events.SAFE_ZONE_UPDATED, handleSafeZoneUpdate);
+  
+  console.log('[SafeZoneLayer] Event subscription complete');
 });
 
 onUnmounted(() => {
+  console.log('[SafeZoneLayer] Component unmounting');
+  
+  // Unsubscribe from events
+  eventBus.off(Events.SAFE_ZONE_UPDATED, handleSafeZoneUpdate);
+  
+  // Remove map zoom listener
   const map = mapStore.mapInstance;
-  if (map && map.getLayer(`${layerId}-border`)) {
-    map.removeLayer(`${layerId}-border`);
+  if (map) {
+    map.off('zoom', updateCircleSize);
   }
-  if (map && map.getLayer(layerId)) {
-    map.removeLayer(layerId);
+  
+  // Clean up marker
+  if (currentMarker) {
+    currentMarker.remove();
+    currentMarker = null;
+    currentSafeZone = null;
   }
-  if (map && map.getSource(sourceId)) {
-    map.removeSource(sourceId);
-  }
+  
+  console.log('[SafeZoneLayer] Cleanup complete');
 });
 </script>
 
+<style scoped>
+/* Styles are inline on elements */
+</style>

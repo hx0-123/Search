@@ -39,7 +39,9 @@ urlpatterns = [
     
     # API路由
     path('api/data/', include('data_owner.urls')),
+    path('api/data_owner/', include('data_owner.adapter_urls')),
     path('api/query/', include('secure_query.urls')),
+    path('api/nodes/', include('fog_node.urls')),
     
     # Swagger文档
     path('swagger/', schema_view.with_ui('swagger', cache_timeout=0), name='schema-swagger-ui'),

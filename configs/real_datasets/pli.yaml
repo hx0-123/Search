@@ -1,0 +1,24 @@
+﻿dataset: PLI
+expected_path: data/PLI/pli.csv
+format: csv
+fields:
+  id: id
+  x: x
+  y: y
+  keywords: keywords
+index_type: KASTree
+encryption: Paillier
+key_size: 512
+query_mode: continuous
+top_k: 10
+fog_nodes: 16
+safe_zone_monitoring: true
+workflow:
+  - dataset_import
+  - preprocessing
+  - encryption
+  - secure_index_construction
+  - encrypted_query_processing
+  - fog_side_scoring
+  - cloud_side_topk_ranking
+  - continuous_update

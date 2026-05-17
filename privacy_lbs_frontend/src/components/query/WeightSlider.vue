@@ -1,6 +1,6 @@
 <!--
-  权重滑块组件
-  用于调整文本-距离权重 (alpha)
+  Weight Slider Component
+  Used to adjust text-distance weight (alpha)
 -->
 <template>
   <div class="weight-slider">
@@ -13,11 +13,11 @@
       @change="handleChange"
     />
     <div class="slider-labels">
-      <span class="label-left">距离优先</span>
-      <span class="label-right">文本优先</span>
+      <span class="label-left">Distance Priority</span>
+      <span class="label-right">Text Priority</span>
     </div>
     <div class="current-value">
-      当前权重: <strong>{{ formatValue(localValue) }}</strong>
+      Current Weight: <strong>{{ formatValue(localValue) }}</strong>
     </div>
   </div>
 </template>
@@ -27,7 +27,7 @@ import { ref, watch } from 'vue';
 
 const props = defineProps<{
   modelValue: number;
-  autoQuery?: boolean; // 是否在调整时自动触发查询
+  autoQuery?: boolean; // Whether to auto trigger query when adjusting
 }>();
 
 const emit = defineEmits<{
@@ -51,11 +51,11 @@ function handleChange(value: number) {
 
 function formatTooltip(value: number): string {
   if (value < 0.3) {
-    return '距离优先';
+    return 'Distance Priority';
   } else if (value > 0.7) {
-    return '文本优先';
+    return 'Text Priority';
   } else {
-    return '平衡';
+    return 'Balanced';
   }
 }
 

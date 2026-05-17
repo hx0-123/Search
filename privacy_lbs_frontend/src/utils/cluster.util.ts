@@ -1,6 +1,6 @@
 /**
- * 地图标记聚类工具
- * 当结果点很多时，使用聚类来优化性能
+ * Map marker clustering utility
+ * When there are many result points, use clustering to optimize performance
  */
 
 import type { QueryResult } from '@/types';
@@ -14,11 +14,11 @@ export interface ClusterPoint {
 }
 
 /**
- * 简单的网格聚类算法
- * @param results 查询结果数组
- * @param zoom 当前地图缩放级别
- * @param threshold 聚类阈值（像素）
- * @returns 聚类后的点数组
+ * Simple grid clustering algorithm
+ * @param results Query results array
+ * @param zoom Current map zoom level
+ * @param threshold Clustering threshold (pixels)
+ * @returns Clustered points array
  */
 export function clusterResults(
   results: QueryResult[],
@@ -27,12 +27,12 @@ export function clusterResults(
 ): ClusterPoint[] {
   if (results.length === 0) return [];
   
-  // 根据缩放级别决定是否启用聚类
-  // 缩放级别越高（数字越大），显示越详细，聚类阈值越小
+  // Determine whether to enable clustering based on zoom level
+  // Higher zoom level (larger number) means more detailed display, smaller clustering threshold
   const clusterZoom = zoom < 12;
   
   if (!clusterZoom || results.length < 10) {
-    // 不聚类，直接返回所有点
+    // No clustering, return all points directly
     return results.map(result => ({
       id: result.id,
       longitude: result.spatialObject.location.longitude,
@@ -41,16 +41,16 @@ export function clusterResults(
     }));
   }
   
-  // 计算网格大小（根据缩放级别和阈值）
+  // Calculate grid size (based on zoom level and threshold)
   const gridSize = threshold / (256 * Math.pow(2, zoom));
   
-  // 使用网格聚类
+  // Use grid clustering
   const grid = new Map<string, ClusterPoint[]>();
   
   for (const result of results) {
     const { longitude, latitude } = result.spatialObject.location;
     
-    // 计算网格坐标
+    // Calculate grid coordinates
     const gridX = Math.floor(longitude / gridSize);
     const gridY = Math.floor(latitude / gridSize);
     const key = `${gridX},${gridY}`;
@@ -67,15 +67,15 @@ export function clusterResults(
     });
   }
   
-  // 生成聚类点
+  // Generate cluster points
   const clusters: ClusterPoint[] = [];
   
   for (const [key, points] of grid.entries()) {
     if (points.length === 1) {
-      // 单个点，直接添加
+      // Single point, add directly
       clusters.push(points[0]);
     } else {
-      // 多个点，创建聚类
+      // Multiple points, create cluster
       const centerLng = points.reduce((sum, p) => sum + p.longitude, 0) / points.length;
       const centerLat = points.reduce((sum, p) => sum + p.latitude, 0) / points.length;
       
@@ -92,10 +92,10 @@ export function clusterResults(
 }
 
 /**
- * 判断是否应该显示聚类
- * @param resultCount 结果数量
- * @param zoom 缩放级别
- * @returns 是否应该聚类
+ * Determine whether clustering should be displayed
+ * @param resultCount Result count
+ * @param zoom Zoom level
+ * @returns Whether clustering should be applied
  */
 export function shouldCluster(resultCount: number, zoom: number): boolean {
   return resultCount > 20 && zoom < 14;

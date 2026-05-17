@@ -1,0 +1,12 @@
+id,x,y,keywords
+1,-122.419,37.775,"road,node,traffic"
+2,-122.408,37.781,"intersection,urban,signal"
+3,-122.397,37.768,"highway,route,transport"
+4,-122.386,37.759,"bridge,connection,road"
+5,-122.375,37.748,"street,vehicle,path"
+6,-122.364,37.737,"junction,network,edge"
+7,-122.353,37.729,"ramp,access,highway"
+8,-122.342,37.720,"arterial,traffic,segment"
+9,-122.331,37.711,"exit,route,transport"
+10,-122.320,37.703,"crossing,signal,road"
+11,-122.309,37.694,"roadnet,vertex,network"

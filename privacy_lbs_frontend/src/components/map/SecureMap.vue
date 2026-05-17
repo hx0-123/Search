@@ -1,10 +1,10 @@
 <!--
-  核心地图容器组件
-  负责地图的初始化、基础交互和图层管理
+  Core Map Container Component
+  Responsible for map initialization, basic interactions and layer management
 -->
 <template>
   <div class="secure-map-container" ref="mapContainer">
-    <!-- 地图控件 -->
+    <!-- Map Controls -->
     <div class="map-controls" v-if="mapLoaded">
       <el-button-group>
         <el-button :icon="ZoomIn" @click="zoomIn" size="small" circle />
@@ -13,23 +13,23 @@
       </el-button-group>
     </div>
     
-    <!-- 地图图例 -->
+    <!-- Map Legend -->
     <div class="map-legend" v-if="mapLoaded">
       <div class="legend-item">
         <span class="legend-color" style="background: #3b82f6;"></span>
-        <span>查询点</span>
+        <span>Query Point</span>
       </div>
       <div class="legend-item">
         <span class="legend-color" style="background: #10b981;"></span>
-        <span>结果点</span>
+        <span>Result Point</span>
       </div>
       <div class="legend-item">
         <span class="legend-color" style="background: #f59e0b;"></span>
-        <span>用户轨迹</span>
+        <span>User Trajectory</span>
       </div>
       <div class="legend-item" v-if="hasSafeZone">
         <span class="legend-color" style="background: #ef4444;"></span>
-        <span>安全区域</span>
+        <span>Safe Zone</span>
       </div>
     </div>
   </div>
@@ -43,8 +43,8 @@ import { ZoomIn, ZoomOut, Refresh } from '@element-plus/icons-vue';
 import { useMapStore } from '@/stores/map.store';
 import { env } from '@/config/env';
 import { handleMapError, showError } from '@/utils/error-handler.util';
-// 注意：图层组件在HomeView中作为子组件注册，这里不需要导入
-// 它们通过mapStore共享地图实例
+// Note: Layer components are registered as child components in HomeView, no need to import here
+// They share the map instance through mapStore
 
 const props = defineProps<{
   initialCenter?: [number, number];
@@ -55,95 +55,233 @@ const mapStore = useMapStore();
 const mapContainer = ref<HTMLElement>();
 const mapLoaded = ref(false);
 let map: mapboxgl.Map | null = null;
+let moveTimer: number | null = null; // Map movement throttle timer
+let moveEndHandler: (() => void) | null = null; // Moveend event handler
+let isMapInitializing = false; // Flag to prevent multiple initializations
 
 const hasSafeZone = computed(() => mapStore.safeZone !== null);
 
 onMounted(() => {
-  console.log('SecureMap 组件已挂载');
-  console.log('Mapbox Token:', env.mapboxToken ? '已配置' : '未配置');
+  // CRITICAL: Delay map initialization significantly to allow UI to render first
+  // This prevents blocking the main thread during initial page load
+  // Use requestIdleCallback if available for better performance
+  if ('requestIdleCallback' in window) {
+    (window as any).requestIdleCallback(() => {
+      initializeMap();
+    }, { timeout: 1000 });
+  } else {
+    setTimeout(() => {
+      initializeMap();
+    }, 1000); // Increased delay to 1 second
+  }
+});
+
+function initializeMap() {
+  // Prevent multiple initializations
+  if (isMapInitializing || map) {
+    return;
+  }
+  isMapInitializing = true;
+  
+  // Removed excessive logging to improve performance
   
   if (!mapContainer.value) {
-    console.error('地图容器元素不存在');
+    setTimeout(() => {
+      console.error('Map container element does not exist');
+    }, 0);
+    isMapInitializing = false;
     return;
   }
   
-  // 设置Mapbox访问令牌
+  // Set Mapbox access token
   mapboxgl.accessToken = env.mapboxToken;
   
   if (!mapboxgl.accessToken || mapboxgl.accessToken === 'pk.your_mapbox_token_here') {
-    console.error('Mapbox访问令牌未配置');
-    const errorInfo = handleMapError(new Error('Mapbox访问令牌未配置'));
+    setTimeout(() => {
+      console.error('Mapbox access token not configured');
+    }, 0);
+    const errorInfo = handleMapError(new Error('Mapbox access token not configured'));
     showError(errorInfo, true);
-    // 即使没有Token，也显示一个占位符
+    // Even without Token, show a placeholder
     if (mapContainer.value) {
       mapContainer.value.innerHTML = `
         <div style="display: flex; align-items: center; justify-content: center; height: 100%; background: #f5f5f5; color: #666;">
           <div style="text-align: center;">
-            <h3>地图加载失败</h3>
-            <p>请配置 Mapbox 访问令牌</p>
-            <p style="font-size: 12px; color: #999;">在 .env.development 中设置 VITE_MAPBOX_ACCESS_TOKEN</p>
+            <h3>Map Loading Failed</h3>
+            <p>Please configure Mapbox access token</p>
+            <p style="font-size: 12px; color: #999;">Set VITE_MAPBOX_ACCESS_TOKEN in .env.development</p>
           </div>
         </div>
       `;
     }
+    isMapInitializing = false;
     return;
   }
   
-  try {
-    // 初始化地图
-    map = new mapboxgl.Map({
-      container: mapContainer.value,
-      style: 'mapbox://styles/mapbox/streets-v12',
-      center: props.initialCenter || mapStore.center,
-      zoom: props.initialZoom || mapStore.zoom,
-      antialias: true,
-    });
+  // Use requestIdleCallback if available, otherwise setTimeout
+  const initMap = () => {
+    if (map) return; // Already initialized
     
-    // 监听地图错误
-    map.on('error', (e) => {
-      const errorInfo = handleMapError(e.error || e);
+    try {
+      // Initialize map with performance optimizations for non-GPU systems
+      // CRITICAL: Use default center/zoom, don't interact with store during init
+      const defaultCenter: [number, number] = [116.4074, 39.9042];
+      const defaultZoom = 12;
+      
+      map = new mapboxgl.Map({
+        container: mapContainer.value!,
+        style: 'mapbox://styles/mapbox/streets-v12',
+        center: defaultCenter, // Use default, don't read from store
+        zoom: defaultZoom, // Use default, don't read from store
+        antialias: false, // Disable antialiasing for better performance without GPU
+        renderWorldCopies: false, // Disable for better performance
+        preserveDrawingBuffer: false, // Disable for better performance
+        fadeDuration: 0, // Disable fade animations for instant rendering
+        maxPitch: 0, // Disable 3D for better performance
+      });
+      
+      // Listen for map errors
+      map.on('error', (e) => {
+        const errorInfo = handleMapError(e.error || e);
+        showError(errorInfo, true);
+      });
+      
+      // Add navigation controls (defer to avoid blocking)
+      setTimeout(() => {
+        if (map) {
+          map.addControl(new mapboxgl.NavigationControl(), 'top-right');
+        }
+      }, 100);
+      
+      // Add fullscreen control (defer to avoid blocking)
+      setTimeout(() => {
+        if (map) {
+          map.addControl(new mapboxgl.FullscreenControl(), 'top-right');
+        }
+      }, 200);
+      
+      // Map loaded
+      map.on('load', () => {
+        console.log('[SecureMap] Map load event fired');
+        mapLoaded.value = true;
+        
+        // CRITICAL: Delay store interaction to avoid blocking
+        setTimeout(() => {
+          console.log('[SecureMap] Setting map instance in store');
+          mapStore.setMapInstance(map!);
+          isMapInitializing = false; // Reset flag after map loads
+          
+          // After map loads, ensure all layer components can initialize correctly
+          // Layer components will auto-initialize by watching isMapLoaded state
+          setTimeout(() => {
+            console.log('[SecureMap] Map loaded, layer components can start initializing');
+          }, 0);
+        }, 100); // Delay store interaction
+        
+        // Note: moveend listener is DISABLED for testing
+      });
+      
+      // Handle map errors
+      map.on('error', () => {
+        isMapInitializing = false; // Reset flag on error
+      });
+      
+      // TEMPORARILY DISABLED: Comment out all move/moveend event listeners to test
+      // This will help identify if move events are causing the freeze
+      /*
+      // CRITICAL: Use 'moveend' instead of 'move' to only update when movement completes
+      // This prevents infinite loops and reduces update frequency significantly
+      // Define moveend handler (but don't attach it yet)
+      moveEndHandler = () => {
+        if (!map) return;
+        
+        // CRITICAL: Check if store is currently updating map to prevent loops
+        if (mapStore.isUpdatingFromMapEvent && mapStore.isUpdatingFromMapEvent()) {
+          return; // Store is updating map, skip this event
+        }
+        
+        // Use requestAnimationFrame to defer update
+        if (moveTimer) {
+          cancelAnimationFrame(moveTimer);
+        }
+        
+        moveTimer = requestAnimationFrame(() => {
+          if (!map) {
+            moveTimer = null;
+            return;
+          }
+          
+          // Double-check flag before updating
+          if (mapStore.isUpdatingFromMapEvent && mapStore.isUpdatingFromMapEvent()) {
+            moveTimer = null;
+            return;
+          }
+          
+          try {
+            const center = map.getCenter();
+            const zoom = map.getZoom();
+            
+            // CRITICAL: Use skipMapUpdate=true to prevent infinite loop
+            // This only updates the store, doesn't trigger map.flyTo()
+            mapStore.setCenter(center.lng, center.lat, true);
+            mapStore.setZoom(zoom, true);
+          } catch (error) {
+            console.warn('Error updating store from map moveend:', error);
+          } finally {
+            moveTimer = null;
+          }
+        });
+      };
+      
+      // Delay adding moveend listener significantly to avoid blocking initialization
+      // Wait for map to be fully loaded and stable (at least 2 seconds after initialization)
+      setTimeout(() => {
+        if (map && map.loaded() && moveEndHandler) {
+          map.on('moveend', moveEndHandler);
+        }
+      }, 2000); // Wait 2 seconds after map initialization
+      */
+      
+      // Map initialized, move events DISABLED for testing
+    } catch (error: any) {
+      const errorInfo = handleMapError(error);
       showError(errorInfo, true);
-    });
-  } catch (error: any) {
-    const errorInfo = handleMapError(error);
-    showError(errorInfo, true);
-    return;
-  }
-  
-  // 添加导航控件
-  map.addControl(new mapboxgl.NavigationControl(), 'top-right');
-  
-  // 添加全屏控件
-  map.addControl(new mapboxgl.FullscreenControl(), 'top-right');
-  
-  // 地图加载完成
-  map.on('load', () => {
-    mapLoaded.value = true;
-    mapStore.setMapInstance(map!);
-    
-    // 地图加载完成后，确保所有图层组件能够正确初始化
-    // 图层组件会通过watch监听isMapLoaded状态来自动初始化
-    console.log('地图加载完成，图层组件可以开始初始化');
-  });
-  
-  // 监听地图移动
-  map.on('move', () => {
-    if (map) {
-      const center = map.getCenter();
-      mapStore.setCenter(center.lng, center.lat);
-      mapStore.setZoom(map.getZoom());
+      return;
     }
-  });
-});
+  };
+  
+  // Use requestIdleCallback if available for better performance
+  if ('requestIdleCallback' in window) {
+    (window as any).requestIdleCallback(initMap, { timeout: 1000 });
+  } else {
+    setTimeout(initMap, 100);
+  }
+}
 
 onUnmounted(() => {
+  // Clean up timer
+  if (moveTimer) {
+    cancelAnimationFrame(moveTimer);
+    moveTimer = null;
+  }
+  
+  // Remove moveend listener
+  if (map && moveEndHandler) {
+    map.off('moveend', moveEndHandler);
+    moveEndHandler = null;
+  }
+  
   if (map) {
     map.remove();
     map = null;
   }
+
+  // Reset map loaded state to ensure layer components reinitialize on next page entry
+  mapStore.isMapLoaded = false;
+  mapStore.mapInstance = null as any;
 });
 
-// 缩放控制
+// Zoom controls
 function zoomIn() {
   if (map) {
     map.zoomIn();
@@ -157,12 +295,20 @@ function zoomOut() {
 }
 
 function resetView() {
-  if (map) {
-    map.flyTo({
-      center: mapStore.center,
-      zoom: mapStore.zoom,
-      duration: 1000,
-    });
+  if (map && mapStore.isMapLoaded) {
+    // CRITICAL: Temporarily disable move event updates to prevent loop
+    // Use direct map methods instead of store methods to avoid triggering updates
+    try {
+      map.flyTo({
+        center: mapStore.center,
+        zoom: mapStore.zoom,
+        duration: 1000,
+      });
+      // After flyTo completes, the move event will update the store
+      // The store's isUpdatingFromMap flag should handle this correctly
+    } catch (error) {
+      console.warn('Error resetting map view:', error);
+    }
   }
 }
 </script>

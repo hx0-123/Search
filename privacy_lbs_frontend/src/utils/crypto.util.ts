@@ -1,13 +1,13 @@
 /**
- * 前端加密工具函数
- * 注意：这里只包含非敏感的前端加密操作（如哈希），
- * 真正的加密解密操作在后端完成
+ * Frontend encryption utility functions
+ * Note: Only non-sensitive frontend operations (like hashing) are included here.
+ * Actual encryption/decryption operations are done on the backend.
  */
 
 /**
- * 计算字符串的简单哈希值（用于非敏感用途）
- * @param str 输入字符串
- * @returns 哈希值
+ * Calculate simple hash value for string (for non-sensitive use)
+ * @param str Input string
+ * @returns Hash value
  */
 export function simpleHash(str: string): string {
   let hash = 0;
@@ -20,9 +20,9 @@ export function simpleHash(str: string): string {
 }
 
 /**
- * 生成唯一ID（用于前端临时标识）
- * @param prefix 前缀
- * @returns 唯一ID
+ * Generate unique ID (for frontend temporary identification)
+ * @param prefix Prefix
+ * @returns Unique ID
  */
 export function generateId(prefix: string = 'id'): string {
   const timestamp = Date.now();
@@ -31,18 +31,18 @@ export function generateId(prefix: string = 'id'): string {
 }
 
 /**
- * 对查询文本进行预处理（去除空格、转小写等）
- * @param text 原始文本
- * @returns 处理后的文本
+ * Preprocess query text (remove whitespace, lowercase, etc.)
+ * @param text Original text
+ * @returns Processed text
  */
 export function preprocessQueryText(text: string): string {
   return text.trim().toLowerCase();
 }
 
 /**
- * 验证查询参数是否有效
- * @param query 查询对象
- * @returns 是否有效
+ * Validate query parameters
+ * @param query Query object
+ * @returns Whether valid
  */
 export function validateQuery(query: {
   text?: string;
@@ -72,18 +72,18 @@ export function validateQuery(query: {
 }
 
 /**
- * 对数据进行Base64编码（用于非敏感数据传输）
- * @param data 要编码的数据
- * @returns Base64编码字符串
+ * Base64 encode data (for non-sensitive data transmission)
+ * @param data Data to encode
+ * @returns Base64 encoded string
  */
 export function encodeBase64(data: string): string {
   return btoa(encodeURIComponent(data));
 }
 
 /**
- * 对Base64编码的数据进行解码
- * @param encoded 编码的字符串
- * @returns 解码后的字符串
+ * Decode Base64 encoded data
+ * @param encoded Encoded string
+ * @returns Decoded string
  */
 export function decodeBase64(encoded: string): string {
   return decodeURIComponent(atob(encoded));

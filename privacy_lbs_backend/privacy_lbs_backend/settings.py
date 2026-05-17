@@ -25,7 +25,7 @@ SECRET_KEY = 'django-insecure-od3ds84&-iof!wdsr4&c6=o^3m$-(q!#ty&6tosb2vqm&z%pb#
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = ['localhost', '127.0.0.1', '*']
 
 
 # Application definition
@@ -38,6 +38,7 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     # 第三方应用
+    'corsheaders',  # CORS支持
     'rest_framework',
     'drf_yasg',
     # 项目应用
@@ -48,6 +49,7 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
+    'corsheaders.middleware.CorsMiddleware',  # CORS中间件，需要在CommonMiddleware之前
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -55,6 +57,14 @@ MIDDLEWARE = [
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
+
+# CSRF配置（开发环境）
+CSRF_TRUSTED_ORIGINS = [
+    'http://localhost:8000',
+    'http://127.0.0.1:8000',
+]
+CSRF_COOKIE_SECURE = False  # 开发环境设为False
+CSRF_COOKIE_HTTPONLY = False
 
 ROOT_URLCONF = 'privacy_lbs_backend.urls'
 
@@ -82,7 +92,12 @@ WSGI_APPLICATION = 'privacy_lbs_backend.wsgi.application'
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
+        'NAME': BASE_DIR / 'db_new.sqlite3',  # 使用新的数据库文件名
+        'OPTIONS': {
+            'timeout': 60,  # 增加超时时间到60秒
+            'check_same_thread': False,  # 允许多线程访问
+        },
+        'CONN_MAX_AGE': 0,  # 不使用持久连接，避免锁定问题
     }
 }
 
@@ -128,18 +143,70 @@ STATIC_URL = 'static/'
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
+# CORS配置
+CORS_ALLOWED_ORIGINS = [
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+]
+
+# 开发环境允许所有来源（仅用于开发）
+CORS_ALLOW_ALL_ORIGINS = True  # 开发环境设置为True，生产环境应设置为False
+
+CORS_ALLOW_CREDENTIALS = True
+
+CORS_ALLOW_METHODS = [
+    'DELETE',
+    'GET',
+    'OPTIONS',
+    'PATCH',
+    'POST',
+    'PUT',
+]
+
+CORS_ALLOW_HEADERS = [
+    'accept',
+    'accept-encoding',
+    'authorization',
+    'content-type',
+    'dnt',
+    'origin',
+    'user-agent',
+    'x-csrftoken',
+    'x-requested-with',
+]
+
 # Django REST Framework配置
 REST_FRAMEWORK = {
     'DEFAULT_PERMISSION_CLASSES': [
-        'rest_framework.permissions.IsAuthenticated',
+        'rest_framework.permissions.AllowAny',  # 开发环境允许匿名访问
     ],
     'DEFAULT_AUTHENTICATION_CLASSES': [
-        'rest_framework.authentication.SessionAuthentication',
-        'rest_framework.authentication.BasicAuthentication',
+        # 开发环境不启用 Session/CSRF 认证，避免 DRF Request 与 Django 原生认证函数的冲突
+        # 生产环境可改为: 'rest_framework.authentication.TokenAuthentication'
     ],
     'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
     'PAGE_SIZE': 20,
 }
+
+# 缓存配置（使用Redis，与Celery共享）
+# Django 4.0+内置支持Redis缓存
+try:
+    CACHES = {
+        'default': {
+            'BACKEND': 'django.core.cache.backends.redis.RedisCache',
+            'LOCATION': 'redis://127.0.0.1:6379/1',  # 使用数据库1，与Celery的数据库0分开
+            'KEY_PREFIX': 'privacy_lbs',
+            'TIMEOUT': 3600,  # 默认超时1小时
+        }
+    }
+except ImportError:
+    # 如果Django版本不支持Redis缓存，使用内存缓存（仅开发环境）
+    CACHES = {
+        'default': {
+            'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
+            'LOCATION': 'unique-snowflake',
+        }
+    }
 
 # Celery配置
 CELERY_BROKER_URL = 'redis://localhost:6379/0'

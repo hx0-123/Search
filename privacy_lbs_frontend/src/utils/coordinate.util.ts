@@ -1,19 +1,19 @@
 /**
- * 坐标转换工具函数
- * 提供各种坐标系统之间的转换功能
+ * Coordinate conversion utility functions
+ * Provides conversion functions between various coordinate systems
  */
 
 /**
- * 计算两点之间的距离（Haversine公式）
- * @param point1 第一个点 [longitude, latitude]
- * @param point2 第二个点 [longitude, latitude]
- * @returns 距离（米）
+ * Calculate distance between two points (Haversine formula)
+ * @param point1 First point [longitude, latitude]
+ * @param point2 Second point [longitude, latitude]
+ * @returns Distance (meters)
  */
 export function calculateDistance(
   point1: [number, number],
   point2: [number, number]
 ): number {
-  const R = 6371000; // 地球半径（米）
+  const R = 6371000; // Earth radius (meters)
   const [lng1, lat1] = point1;
   const [lng2, lat2] = point2;
   
@@ -32,24 +32,24 @@ export function calculateDistance(
 }
 
 /**
- * 角度转弧度
+ * Convert degrees to radians
  */
 function toRadians(degrees: number): number {
   return degrees * (Math.PI / 180);
 }
 
 /**
- * 弧度转角度
+ * Convert radians to degrees
  */
 function toDegrees(radians: number): number {
   return radians * (180 / Math.PI);
 }
 
 /**
- * 计算两点之间的方位角（从point1到point2）
- * @param point1 起点 [longitude, latitude]
- * @param point2 终点 [longitude, latitude]
- * @returns 方位角（度，0-360）
+ * Calculate bearing between two points (from point1 to point2)
+ * @param point1 Start point [longitude, latitude]
+ * @param point2 End point [longitude, latitude]
+ * @returns Bearing (degrees, 0-360)
  */
 export function calculateBearing(
   point1: [number, number],
@@ -75,18 +75,18 @@ export function calculateBearing(
 }
 
 /**
- * 根据起点、距离和方位角计算终点
- * @param start 起点 [longitude, latitude]
- * @param distance 距离（米）
- * @param bearing 方位角（度）
- * @returns 终点 [longitude, latitude]
+ * Calculate destination point from start, distance and bearing
+ * @param start Start point [longitude, latitude]
+ * @param distance Distance (meters)
+ * @param bearing Bearing (degrees)
+ * @returns Destination [longitude, latitude]
  */
 export function calculateDestination(
   start: [number, number],
   distance: number,
   bearing: number
 ): [number, number] {
-  const R = 6371000; // 地球半径（米）
+  const R = 6371000; // Earth radius (meters)
   const [lng1, lat1] = start;
   const lat1Rad = toRadians(lat1);
   const bearingRad = toRadians(bearing);
@@ -108,10 +108,10 @@ export function calculateDestination(
 }
 
 /**
- * 检查坐标是否在有效范围内
- * @param longitude 经度
- * @param latitude 纬度
- * @returns 是否有效
+ * Check if coordinate is within valid range
+ * @param longitude Longitude
+ * @param latitude Latitude
+ * @returns Whether valid
  */
 export function isValidCoordinate(
   longitude: number,
@@ -126,24 +126,24 @@ export function isValidCoordinate(
 }
 
 /**
- * 格式化距离显示
- * @param distance 距离（米）
- * @returns 格式化后的字符串
+ * Format distance for display
+ * @param distance Distance (meters)
+ * @returns Formatted string
  */
 export function formatDistance(distance: number): string {
   if (distance < 1000) {
-    return `${Math.round(distance)}米`;
+    return `${Math.round(distance)}m`;
   } else if (distance < 10000) {
-    return `${(distance / 1000).toFixed(1)}公里`;
+    return `${(distance / 1000).toFixed(1)}km`;
   } else {
-    return `${Math.round(distance / 1000)}公里`;
+    return `${Math.round(distance / 1000)}km`;
   }
 }
 
 /**
- * 将坐标数组转换为GeoJSON格式
- * @param coordinates 坐标数组 [[lng, lat], ...]
- * @returns GeoJSON格式的坐标
+ * Convert coordinate array to GeoJSON format
+ * @param coordinates Coordinate array [[lng, lat], ...]
+ * @returns GeoJSON formatted coordinates
  */
 export function toGeoJSONCoordinates(
   coordinates: [number, number][]
@@ -152,9 +152,9 @@ export function toGeoJSONCoordinates(
 }
 
 /**
- * 计算多边形的中心点
- * @param polygon 多边形坐标数组
- * @returns 中心点 [longitude, latitude]
+ * Calculate polygon center point
+ * @param polygon Polygon coordinate array
+ * @returns Center point [longitude, latitude]
  */
 export function calculatePolygonCenter(
   polygon: [number, number][]

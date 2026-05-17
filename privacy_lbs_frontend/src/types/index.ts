@@ -1,10 +1,10 @@
 /**
- * TypeScript类型定义
- * 定义系统中使用的所有接口和类型
+ * TypeScript Type Definitions
+ * Define all interfaces and types used in the system
  */
 
 /**
- * 空间对象（POI）
+ * Spatial Object (POI)
  */
 export interface SpatialObject {
   id: string;
@@ -20,36 +20,36 @@ export interface SpatialObject {
 }
 
 /**
- * 查询参数
+ * Query Parameters
  */
 export interface Query {
   id?: string;
-  text: string; // 查询文本
+  text: string; // Query text
   location: {
     longitude: number;
     latitude: number;
   };
-  alpha: number; // 文本-距离权重 (0-1)
-  k: number; // Top-K结果数量
-  radius?: number; // 查询半径（可选）
-  timestamp?: number; // 查询时间戳
+  alpha: number; // Text-distance weight (0-1)
+  k: number; // Top-K results count
+  radius?: number; // Query radius (optional)
+  timestamp?: number; // Query timestamp
 }
 
 /**
- * 查询结果
+ * Query Result
  */
 export interface QueryResult {
   id: string;
   spatialObject: SpatialObject;
-  score: number; // 综合评分
-  textScore?: number; // 文本相似度评分
-  distanceScore?: number; // 距离评分
-  distance: number; // 距离（米）
-  encryptedScore?: string; // 加密评分（从服务器返回）
+  score: number; // Overall score
+  textScore?: number; // Text similarity score
+  distanceScore?: number; // Distance score
+  distance: number; // Distance (meters)
+  encryptedScore?: string; // Encrypted score (from server)
 }
 
 /**
- * 安全区域
+ * Safe Zone
  */
 export interface SafeZone {
   id: string;
@@ -58,12 +58,12 @@ export interface SafeZone {
     longitude: number;
     latitude: number;
   };
-  radius: number; // 半径（米）
-  polygon?: [number, number][]; // 多边形边界（可选）
+  radius: number; // Radius (meters)
+  polygon?: [number, number][]; // Polygon boundary (optional)
 }
 
 /**
- * 用户轨迹点
+ * User Trajectory Point
  */
 export interface TrajectoryPoint {
   longitude: number;
@@ -74,19 +74,19 @@ export interface TrajectoryPoint {
 }
 
 /**
- * 路线规划结果
+ * Route Planning Result
  */
 export interface RoutePlan {
   id: string;
   waypoints: SpatialObject[];
-  totalDistance: number; // 总距离（米）
-  totalTime: number; // 预计总时间（秒）
-  polyline: [number, number][]; // 路线折线
+  totalDistance: number; // Total distance (meters)
+  totalTime: number; // Estimated total time (seconds)
+  polyline: [number, number][]; // Route polyline
   steps?: RouteStep[];
 }
 
 /**
- * 路线步骤
+ * Route Step
  */
 export interface RouteStep {
   instruction: string;
@@ -96,7 +96,7 @@ export interface RouteStep {
 }
 
 /**
- * 实时位置更新
+ * Real-time Location Update
  */
 export interface RealTimeLocation {
   longitude: number;
@@ -106,7 +106,7 @@ export interface RealTimeLocation {
 }
 
 /**
- * 查询状态
+ * Query Status
  */
 export enum QueryStatus {
   IDLE = 'idle',
@@ -117,7 +117,7 @@ export enum QueryStatus {
 }
 
 /**
- * API响应基础结构
+ * API Response Base Structure
  */
 export interface ApiResponse<T = any> {
   success: boolean;
@@ -127,7 +127,7 @@ export interface ApiResponse<T = any> {
 }
 
 /**
- * 分页响应
+ * Paginated Response
  */
 export interface PaginatedResponse<T> {
   count: number;
@@ -137,11 +137,66 @@ export interface PaginatedResponse<T> {
 }
 
 /**
- * WebSocket消息类型
+ * WebSocket Message Types
  */
 export interface WebSocketMessage {
   type: 'query_update' | 'result_update' | 'error' | 'status';
   payload: any;
   timestamp: number;
+}
+
+// ─────────────────────────────────────────────────────────────
+// Additional Types (added in refactoring)
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * Point of Interest (POI)
+ */
+export interface POI {
+  id: string;
+  name: string;
+  lng: number;
+  lat: number;
+  keywords: string[];
+  category?: string;
+}
+
+/**
+ * Query History Item
+ * Written by recordHistory() in query.store.ts
+ */
+export interface QueryHistoryItem {
+  /** Unique ID */
+  id: string;
+  /** Query timestamp */
+  timestamp: Date;
+  /** Keyword list (tokenized from query text) */
+  keywords: string[];
+  /** Query location [longitude, latitude] */
+  location: [number, number];
+  /** Query radius (meters) */
+  radius: number;
+  /** Text-distance weight (0-1) */
+  alpha: number;
+  /** End-to-end query latency (milliseconds) */
+  latencyMs: number;
+  /** Whether this query hit the safe zone cache */
+  safeZoneHit: boolean;
+  /** Number of results returned */
+  resultCount: number;
+}
+
+/**
+ * Paillier Homomorphic Encryption Configuration
+ */
+export interface EncryptionConfig {
+  /** Encryption algorithm, currently fixed to Paillier */
+  algorithm: 'Paillier';
+  /** Key length (bits) */
+  keySize: 512 | 1024 | 2048;
+  /** Encryption time (milliseconds) */
+  encryptionTimeMs: number;
+  /** Key size (MB) */
+  keySizeMB: number;
 }
 

@@ -5,106 +5,106 @@ import json
 
 class FogNode(models.Model):
     """
-    雾节点信息
-    管理雾节点集群的状态和配置
+    Fog Node Information
+    Manages the status and configuration of fog node cluster
     """
     
     NODE_STATUS_CHOICES = [
-        ('active', '活跃'),
-        ('inactive', '非活跃'),
-        ('maintenance', '维护中'),
-        ('error', '错误'),
+        ('active', 'Active'),
+        ('inactive', 'Inactive'),
+        ('maintenance', 'Maintenance'),
+        ('error', 'Error'),
     ]
     
-    # 节点标识
+    # Node Identifier
     node_id = models.CharField(
         max_length=64,
         unique=True,
         db_index=True,
-        verbose_name='节点ID'
+        verbose_name='Node ID'
     )
     
     node_name = models.CharField(
         max_length=128,
-        verbose_name='节点名称'
+        verbose_name='Node Name'
     )
     
-    # 节点状态
+    # Node Status
     status = models.CharField(
         max_length=20,
         choices=NODE_STATUS_CHOICES,
         default='inactive',
         db_index=True,
-        verbose_name='节点状态'
+        verbose_name='Node Status'
     )
     
-    # 节点地址信息
+    # Node Address Information
     host = models.CharField(
         max_length=255,
-        verbose_name='主机地址',
-        help_text='雾节点的主机地址或IP'
+        verbose_name='Host Address',
+        help_text='Fog node host address or IP'
     )
     
     port = models.IntegerField(
         validators=[MinValueValidator(1)],
-        verbose_name='端口号'
+        verbose_name='Port'
     )
     
-    # 节点能力信息
+    # Node Capacity Information
     max_concurrent_tasks = models.IntegerField(
         default=10,
         validators=[MinValueValidator(1)],
-        verbose_name='最大并发任务数'
+        verbose_name='Max Concurrent Tasks'
     )
     
     current_tasks = models.IntegerField(
         default=0,
         validators=[MinValueValidator(0)],
-        verbose_name='当前任务数'
+        verbose_name='Current Tasks'
     )
     
-    # 性能统计
+    # Performance Statistics
     total_tasks_processed = models.IntegerField(
         default=0,
         validators=[MinValueValidator(0)],
-        verbose_name='总处理任务数'
+        verbose_name='Total Tasks Processed'
     )
     
     average_processing_time = models.FloatField(
         default=0.0,
         validators=[MinValueValidator(0.0)],
-        verbose_name='平均处理时间(秒)'
+        verbose_name='Average Processing Time (seconds)'
     )
     
-    # 节点元数据
+    # Node Metadata
     metadata = models.JSONField(
         default=dict,
         blank=True,
-        verbose_name='节点元数据',
-        help_text='存储节点的额外配置信息'
+        verbose_name='Node Metadata',
+        help_text='Store additional configuration information for the node'
     )
     
-    # 时间戳
+    # Timestamps
     created_at = models.DateTimeField(
         auto_now_add=True,
-        verbose_name='创建时间'
+        verbose_name='Created At'
     )
     
     updated_at = models.DateTimeField(
         auto_now=True,
-        verbose_name='更新时间'
+        verbose_name='Updated At'
     )
     
     last_heartbeat = models.DateTimeField(
         blank=True,
         null=True,
-        verbose_name='最后心跳时间',
-        help_text='节点最后上报心跳的时间'
+        verbose_name='Last Heartbeat',
+        help_text='Time when the node last reported heartbeat'
     )
     
     class Meta:
-        verbose_name = '雾节点'
-        verbose_name_plural = '雾节点'
+        verbose_name = 'Fog Node'
+        verbose_name_plural = 'Fog Nodes'
         db_table = 'fog_node'
         indexes = [
             models.Index(fields=['node_id', 'status']),
@@ -117,111 +117,111 @@ class FogNode(models.Model):
 
 class ComputationTask(models.Model):
     """
-    计算任务
-    记录云平台分发给雾节点的计算子任务
+    Computation Task
+    Records computing subtasks distributed from cloud platform to fog nodes
     """
     
     TASK_STATUS_CHOICES = [
-        ('pending', '待处理'),
-        ('assigned', '已分配'),
-        ('processing', '处理中'),
-        ('completed', '已完成'),
-        ('failed', '失败'),
-        ('timeout', '超时'),
+        ('pending', 'Pending'),
+        ('assigned', 'Assigned'),
+        ('processing', 'Processing'),
+        ('completed', 'Completed'),
+        ('failed', 'Failed'),
+        ('timeout', 'Timeout'),
     ]
     
-    # 任务标识
+    # Task Identifier
     task_id = models.CharField(
         max_length=64,
         unique=True,
         db_index=True,
-        verbose_name='任务ID'
+        verbose_name='Task ID'
     )
     
-    # 关联查询
+    # Related Query
     query_id = models.CharField(
         max_length=64,
         db_index=True,
-        verbose_name='查询ID',
-        help_text='关联的查询请求ID'
+        verbose_name='Query ID',
+        help_text='Associated query request ID'
     )
     
-    # 关联雾节点
+    # Related Fog Node
     fog_node = models.ForeignKey(
         FogNode,
         on_delete=models.SET_NULL,
         blank=True,
         null=True,
         related_name='tasks',
-        verbose_name='分配的雾节点'
+        verbose_name='Assigned Fog Node'
     )
     
-    # 任务类型
+    # Task Type
     task_type = models.CharField(
         max_length=50,
-        verbose_name='任务类型',
-        help_text='如：similarity_computation, distance_calculation等'
+        verbose_name='Task Type',
+        help_text='e.g., similarity_computation, distance_calculation, etc.'
     )
     
-    # 任务状态
+    # Task Status
     status = models.CharField(
         max_length=20,
         choices=TASK_STATUS_CHOICES,
         default='pending',
         db_index=True,
-        verbose_name='任务状态'
+        verbose_name='Task Status'
     )
     
-    # 任务输入数据 (加密的候选集)
+    # Task Input Data (encrypted candidate set)
     encrypted_input_data = models.TextField(
-        verbose_name='加密输入数据',
-        help_text='JSON格式存储的加密候选集数据'
+        verbose_name='Encrypted Input Data',
+        help_text='Encrypted candidate set data stored in JSON format'
     )
     
-    # 任务输出结果 (加密的评分)
+    # Task Output Result (encrypted scores)
     encrypted_output_data = models.TextField(
         blank=True,
         null=True,
-        verbose_name='加密输出数据',
-        help_text='JSON格式存储的加密计算结果'
+        verbose_name='Encrypted Output Data',
+        help_text='Encrypted computation results stored in JSON format'
     )
     
-    # 任务元数据
+    # Task Metadata
     metadata = models.JSONField(
         default=dict,
         blank=True,
-        verbose_name='任务元数据',
-        help_text='存储任务相关的额外信息'
+        verbose_name='Task Metadata',
+        help_text='Store additional information related to the task'
     )
     
-    # 时间戳
+    # Timestamps
     created_at = models.DateTimeField(
         auto_now_add=True,
         db_index=True,
-        verbose_name='创建时间'
+        verbose_name='Created At'
     )
     
     assigned_at = models.DateTimeField(
         blank=True,
         null=True,
-        verbose_name='分配时间'
+        verbose_name='Assigned At'
     )
     
     started_at = models.DateTimeField(
         blank=True,
         null=True,
-        verbose_name='开始处理时间'
+        verbose_name='Started At'
     )
     
     completed_at = models.DateTimeField(
         blank=True,
         null=True,
-        verbose_name='完成时间'
+        verbose_name='Completed At'
     )
     
     class Meta:
-        verbose_name = '计算任务'
-        verbose_name_plural = '计算任务'
+        verbose_name = 'Computation Task'
+        verbose_name_plural = 'Computation Tasks'
         db_table = 'computation_task'
         indexes = [
             models.Index(fields=['query_id', 'status']),

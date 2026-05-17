@@ -1,236 +1,148 @@
 <!--
-  结果标记图层组件
-  在地图上绘制Top-K查询结果
+  Result Marker Layer Component
+  Directly renders plaintext POI markers (Cloud C2 has completed Paillier decryption on backend)
 -->
 <template>
-  <!-- 此组件通过地图store和地图实例来渲染，不需要模板 -->
+  <!-- This component operates via map instance, no template DOM needed -->
 </template>
 
 <script setup lang="ts">
-import { ref, watch, onMounted, onUnmounted, computed } from 'vue';
+import { watch, onMounted, onUnmounted } from 'vue';
 import mapboxgl from 'mapbox-gl';
 import { useMapStore } from '@/stores/map.store';
 import { useResultStore } from '@/stores/result.store';
-import { clusterResults, shouldCluster } from '@/utils/cluster.util';
-import type { QueryResult } from '@/types';
-import type { ClusterPoint } from '@/utils/cluster.util';
 
-const mapStore = useMapStore();
+const mapStore    = useMapStore();
 const resultStore = useResultStore();
 
-const markers = ref<mapboxgl.Marker[]>([]);
-const popups = ref<mapboxgl.Popup[]>([]);
-const useClustering = ref(true); // 是否启用聚类
-
-// 计算是否应该使用聚类
-const shouldUseClustering = computed(() => {
-  if (!mapStore.mapInstance) return false;
-  return shouldCluster(
-    resultStore.sortedResults.length,
-    mapStore.mapInstance.getZoom()
-  );
-});
+let markers: mapboxgl.Marker[] = [];
 
 function updateResultMarkers() {
   const map = mapStore.mapInstance;
   if (!map || !mapStore.isMapLoaded) return;
-  
-  // 清除旧标记
-  clearMarkers();
-  
+
   const results = resultStore.sortedResults;
-  const zoom = map.getZoom();
-  
-  // 决定是否使用聚类
-  const enableClustering = useClustering.value && shouldUseClustering.value;
-  const displayPoints = enableClustering
-    ? clusterResults(results, zoom)
-    : results.map(result => ({
-        id: result.id,
-        longitude: result.spatialObject.location.longitude,
-        latitude: result.spatialObject.location.latitude,
-        result: result,
-      }));
-  
-  // 创建新标记
-  displayPoints.forEach((point, index) => {
-    const isCluster = 'count' in point && point.count !== undefined;
-    
-    if (isCluster) {
-      // 创建聚类标记
-      const cluster = point as ClusterPoint;
-      const [lng, lat] = [cluster.longitude, cluster.latitude];
-      
-      const marker = new mapboxgl.Marker({
-        color: '#f59e0b',
-        scale: 1.2,
-      })
-        .setLngLat([lng, lat])
-        .addTo(map);
-      
-      // 创建聚类弹出窗口
-      const popup = new mapboxgl.Popup({ offset: 25 })
-        .setHTML(`
-          <div class="cluster-popup">
-            <h4>聚类点</h4>
-            <p>包含 <strong>${cluster.count}</strong> 个结果</p>
-            <p>点击查看详情</p>
-          </div>
-        `);
-      
-      marker.setPopup(popup);
-      
-      // 点击聚类时放大地图
-      marker.getElement().addEventListener('click', () => {
-        map.flyTo({
-          center: [lng, lat],
-          zoom: Math.min(zoom + 2, 18),
-          duration: 500,
-        });
+
+  // Clear old markers
+  markers.forEach(m => { try { m.remove(); } catch {} });
+  markers = [];
+
+  if (!results || results.length === 0) return;
+
+  const limitedResults = results.slice(0, 20);
+
+  limitedResults.forEach((result, index) => {
+    try {
+      const location = result.spatialObject?.location;
+      if (
+        !location ||
+        location.longitude == null ||
+        location.latitude  == null ||
+        isNaN(location.longitude) ||
+        isNaN(location.latitude)  ||
+        Math.abs(location.latitude)  > 90  ||
+        Math.abs(location.longitude) > 180
+      ) {
+        console.warn(`[ResultMarkerLayer] Skip invalid location #${index + 1}:`, location);
+        return;
+      }
+
+      // Plaintext name (C2 decrypted, use directly)
+      const rawName = (result.spatialObject.name ?? '').trim();
+      const isObjectId = /^[0-9a-f-]{32,}$/i.test(rawName);
+      const displayName = isObjectId || !rawName ? `POI #${index + 1}` : rawName;
+
+      // Score values
+      const overallScore  = typeof result.score         === 'number' ? result.score.toFixed(2)         : '—';
+      const textScore     = typeof result.textScore     === 'number' ? result.textScore.toFixed(2)     : '—';
+      const distanceScore = typeof result.distanceScore === 'number' ? result.distanceScore.toFixed(2) : '—';
+      const distanceLabel = typeof result.distance      === 'number'
+        ? (result.distance >= 1000 ? `${(result.distance / 1000).toFixed(1)} km` : `${result.distance} m`)
+        : '—';
+      const barW = typeof result.score === 'number' ? Math.round(result.score * 100) : 0;
+
+      // Marker element
+      const el = document.createElement('div');
+      el.className = 'result-marker';
+      Object.assign(el.style, {
+        backgroundColor: '#10b981',
+        width: '20px',
+        height: '20px',
+        borderRadius: '50%',
+        border: '2px solid white',
+        cursor: 'pointer',
+        boxShadow: '0 2px 4px rgba(0,0,0,0.3)',
       });
-      
-      markers.value.push(marker);
-    } else {
-      // 创建普通结果标记
-      const result = (point as ClusterPoint).result!;
-      if (!result) return;
-      
-      const { spatialObject } = result;
-      const [lng, lat] = [spatialObject.location.longitude, spatialObject.location.latitude];
-      
-      // 判断是否为选中的结果
-      const isSelected = result.id === resultStore.selectedResult?.id;
-      
-      // 创建标记（选中时使用不同颜色）
-      const marker = new mapboxgl.Marker({
-        color: isSelected ? '#409eff' : '#10b981',
-        scale: isSelected ? 1.0 : 0.8,
-      })
-        .setLngLat([lng, lat])
+
+      const marker = new mapboxgl.Marker(el)
+        .setLngLat([location.longitude, location.latitude])
         .addTo(map);
-      
-      // 创建弹出窗口
-      const popup = new mapboxgl.Popup({ offset: 25 })
-        .setHTML(`
-          <div class="result-popup">
-            <h4>${spatialObject.name}</h4>
-            <p>${spatialObject.description || ''}</p>
-            <p><strong>评分:</strong> ${result.score.toFixed(2)}</p>
-            <p><strong>距离:</strong> ${(result.distance / 1000).toFixed(2)}km</p>
-            <p><strong>排名:</strong> ${index + 1}</p>
-          </div>
-        `);
-      
-      marker.setPopup(popup);
-      
-      // 点击标记时选中结果，并高亮地图上的位置
-      marker.getElement().addEventListener('click', () => {
+
+      el.addEventListener('click', () => {
         resultStore.setSelectedResult(result);
-        // 移动地图到该位置
-        map.flyTo({
-          center: [lng, lat],
-          zoom: Math.max(map.getZoom(), 14),
-          duration: 500,
-        });
+
+        new mapboxgl.Popup({ offset: 25, maxWidth: '240px' })
+          .setLngLat([location.longitude, location.latitude])
+          .setHTML(`
+            <div style="font-family:'PingFang SC','Microsoft YaHei',sans-serif;padding:10px 12px;min-width:200px">
+              <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px">
+                <span style="background:#10b981;color:#fff;font-size:11px;font-weight:700;border-radius:3px;padding:1px 6px">#${index + 1}</span>
+                <strong style="font-size:13px;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#1e293b">${displayName}</strong>
+              </div>
+              <div style="background:#f1f5f9;border-radius:4px;overflow:hidden;height:6px;margin-bottom:8px">
+                <div style="width:${barW}%;height:100%;background:linear-gradient(90deg,#10b981,#059669);border-radius:4px"></div>
+              </div>
+              <table style="width:100%;font-size:12px;border-collapse:collapse">
+                <tr><td style="color:#64748b;padding:2px 0">Overall Score</td><td style="text-align:right;font-weight:700;color:#10b981">${overallScore}</td></tr>
+                <tr><td style="color:#64748b;padding:2px 0">Text Score</td><td style="text-align:right;color:#38bdf8">${textScore}</td></tr>
+                <tr><td style="color:#64748b;padding:2px 0">Distance Score</td><td style="text-align:right;color:#a78bfa">${distanceScore}</td></tr>
+                <tr><td style="color:#64748b;padding:2px 0">Actual Distance</td><td style="text-align:right;color:#94a3b8">${distanceLabel}</td></tr>
+              </table>
+              ${result.spatialObject.description
+                ? `<div style="margin-top:7px;padding-top:7px;border-top:1px solid #e2e8f0;font-size:11px;color:#64748b;line-height:1.5">${result.spatialObject.description}</div>`
+                : ''}
+            </div>
+          `)
+          .addTo(map);
       });
-      
-      markers.value.push(marker);
+
+      markers.push(marker);
+    } catch (error) {
+      console.error(`[ResultMarkerLayer] Create marker failed #${index}:`, error);
     }
   });
 }
 
-function clearMarkers() {
-  markers.value.forEach(marker => marker.remove());
-  popups.value.forEach(popup => popup.remove());
-  markers.value = [];
-  popups.value = [];
-}
+let updateTimer: number | null = null;
 
-// 监听结果变化
 watch(
   () => resultStore.sortedResults,
-  () => {
-    updateResultMarkers();
+  (newResults) => {
+    if (updateTimer) clearTimeout(updateTimer);
+    updateTimer = window.setTimeout(() => {
+      try { updateResultMarkers(); } catch (e) { console.error(e); } finally { updateTimer = null; }
+    }, 300);
   },
-  { deep: true }
+  { immediate: false, deep: false }
 );
 
-// 监听地图缩放变化，重新计算聚类
-watch(
-  () => mapStore.mapInstance?.getZoom(),
-  () => {
-    if (mapStore.isMapLoaded && shouldUseClustering.value) {
-      updateResultMarkers();
-    }
-  }
-);
-
-// 监听选中结果变化，更新标记高亮
-watch(
-  () => resultStore.selectedResult,
-  (selectedResult) => {
-    if (!mapStore.mapInstance || !mapStore.isMapLoaded) return;
-    
-    // 重新绘制标记以更新高亮状态
-    updateResultMarkers();
-  },
-  { deep: true }
-);
-
-// 监听地图加载
 watch(
   () => mapStore.isMapLoaded,
-  (loaded) => {
-    if (loaded) {
-      updateResultMarkers();
-    }
-  }
+  (loaded) => { if (loaded) setTimeout(() => updateResultMarkers(), 500); },
+  { immediate: false }
 );
 
 onMounted(() => {
-  if (mapStore.isMapLoaded) {
-    updateResultMarkers();
-  }
+  if (mapStore.isMapLoaded) setTimeout(() => updateResultMarkers(), 500);
 });
 
 onUnmounted(() => {
-  clearMarkers();
+  if (updateTimer) { clearTimeout(updateTimer); updateTimer = null; }
+  markers.forEach(m => { try { m.remove(); } catch {} });
+  markers = [];
 });
 </script>
 
-<style>
-.result-popup {
-  min-width: 200px;
-}
-
-.result-popup h4 {
-  margin: 0 0 8px 0;
-  font-size: 16px;
-  font-weight: 600;
-}
-
-.result-popup p {
-  margin: 4px 0;
-  font-size: 14px;
-  color: #666;
-}
-
-.cluster-popup {
-  min-width: 150px;
-  text-align: center;
-}
-
-.cluster-popup h4 {
-  margin: 0 0 8px 0;
-  font-size: 16px;
-  font-weight: 600;
-  color: #f59e0b;
-}
-
-.cluster-popup p {
-  margin: 4px 0;
-  font-size: 14px;
-  color: #666;
-}
+<style scoped>
+/* Marker styles controlled via inline style */
 </style>
-

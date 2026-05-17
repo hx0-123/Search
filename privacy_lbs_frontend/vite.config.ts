@@ -8,7 +8,7 @@ import vueDevTools from 'vite-plugin-vue-devtools'
 export default defineConfig({
   plugins: [
     vue(),
-    // 只在开发环境启用DevTools
+    // Enable DevTools only in development environment
     process.env.NODE_ENV === 'development' && vueDevTools(),
   ].filter(Boolean),
   resolve: {
@@ -17,21 +17,21 @@ export default defineConfig({
     },
   },
   build: {
-    // 生产环境构建优化
+    // Production build optimizations
     target: 'es2015',
     outDir: 'dist',
     assetsDir: 'assets',
-    sourcemap: false, // 生产环境不生成sourcemap
+    sourcemap: false, // Don't generate sourcemap in production
     minify: 'terser',
     terserOptions: {
       compress: {
-        drop_console: true, // 移除console
+        drop_console: true, // Remove console.log
         drop_debugger: true,
       },
     },
     rollupOptions: {
       output: {
-        // 代码分割
+        // Code splitting
         manualChunks: {
           'vue-vendor': ['vue', 'vue-router', 'pinia'],
           'element-plus': ['element-plus', '@element-plus/icons-vue'],
@@ -39,13 +39,13 @@ export default defineConfig({
         },
       },
     },
-    chunkSizeWarningLimit: 1000, // 块大小警告限制
+    chunkSizeWarningLimit: 1000, // Chunk size warning limit
   },
   server: {
     port: 5173,
-    host: true, // 允许外部访问
+    host: true, // Allow external access
     proxy: {
-      // 开发环境代理（可选）
+      // Development environment proxy (optional)
       '/api': {
         target: 'http://127.0.0.1:8000',
         changeOrigin: true,

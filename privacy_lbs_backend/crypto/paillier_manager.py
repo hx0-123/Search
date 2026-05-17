@@ -103,8 +103,8 @@ class PaillierManager:
         json_str = base64.b64decode(public_key_str.encode()).decode()
         key_data = json.loads(json_str)
         n = int(key_data['n'])
-        g = int(key_data['g'])
-        return paillier.PaillierPublicKey(n=n, g=g)
+        # PaillierPublicKey构造函数只接受n参数，g通常是n+1（默认值）
+        return paillier.PaillierPublicKey(n=n)
     
     def _serialize_private_key(self, private_key: paillier.PaillierPrivateKey) -> str:
         """序列化私钥为字符串"""
@@ -157,6 +157,31 @@ class PaillierManager:
         Returns:
             str: 序列化后的密文字符串
         """
+        if not self.public_key:
+            raise ValueError("公钥未初始化")
+        
+        encrypted_number = self.public_key.encrypt(plaintext)
+        return self._serialize_encrypted_number(encrypted_number)
+    
+    def encrypt_string(self, plaintext: str) -> str:
+        """
+        加密字符串明文（通过哈希转换为整数后加密）
+        
+        Args:
+            plaintext: 要加密的字符串
+            
+        Returns:
+            str: 序列化后的密文字符串
+        """
+        if not self.public_key:
+            raise ValueError("公钥未初始化")
+        
+        # 将字符串转换为哈希值（使用Python内置hash，然后取模避免负数）
+        # 注意：hash()在不同Python会话中可能不同，但对于同一会话是一致的
+        hash_value = hash(plaintext) % (10 ** 15)  # 限制在合理范围内
+        
+        # 加密哈希值
+        return self.encrypt_int(hash_value)
         if not self.public_key:
             raise ValueError("公钥未初始化")
         

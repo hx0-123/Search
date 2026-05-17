@@ -1,7 +1,7 @@
-<!-- 部分核心代码，展示结构 -->
+<!-- Partial core code showing structure -->
 <template>
   <div class="map-container" ref="mapContainer"></div>
-  <!-- 地图交互控件、图例等将放在这里 -->
+  <!-- Map interaction controls, legend, etc. will be placed here -->
 </template>
 
 <script setup lang="ts">
@@ -11,10 +11,10 @@ import { ref, onMounted, onUnmounted, watch } from 'vue';
 import type { QueryResult, SafeZone } from '@/types';
 
 const props = defineProps<{
-  initialCenter: [number, number]; // 初始中心点 [lng, lat]
-  queryResults: QueryResult[];     // 查询结果
-  userTrajectory: [number, number][]; // 用户轨迹
-  safeZone?: SafeZone;             // 安全区域
+  initialCenter: [number, number]; // Initial center [lng, lat]
+  queryResults: QueryResult[];     // Query results
+  userTrajectory: [number, number][]; // User trajectory
+  safeZone?: SafeZone;             // Safe zone
 }>();
 
 const mapContainer = ref<HTMLElement>();
@@ -31,20 +31,20 @@ onMounted(() => {
     zoom: 12
   });
 
-  // 添加导航控件
+  // Add navigation control
   map.addControl(new mapboxgl.NavigationControl());
 
-  // 地图加载完成后，初始化数据源和图层
+  // After map loads, initialize data sources and layers
   map.on('load', () => {
     initializeDataSources();
     renderAllLayers();
   });
 });
 
-// 核心函数：初始化地图数据源
+// Core function: Initialize map data sources
 function initializeDataSources() {
   if (!map) return;
-  // 1. 为用户轨迹添加数据源
+  // 1. Add data source for user trajectory
   if (!map.getSource('user-trajectory')) {
     map.addSource('user-trajectory', {
       type: 'geojson',
@@ -54,7 +54,7 @@ function initializeDataSources() {
       }
     });
   }
-  // 2. 为查询结果点（POI）添加数据源
+  // 2. Add data source for query results (POI)
   if (!map.getSource('query-results')) {
     map.addSource('query-results', {
       type: 'geojson',
@@ -64,7 +64,7 @@ function initializeDataSources() {
       }
     });
   }
-  // 3. 为安全区域添加数据源
+  // 3. Add data source for safe zone
   if (!map.getSource('safe-zone')) {
     map.addSource('safe-zone', {
       type: 'geojson',
@@ -76,12 +76,12 @@ function initializeDataSources() {
   }
 }
 
-// 监听数据变化，更新地图显示
+// Watch for data changes and update map display
 watch(() => props.userTrajectory, (newTrajectory) => {
   updateTrajectoryOnMap(newTrajectory);
 }, { deep: true });
 
-// 更新轨迹图层
+// Update trajectory layer
 function updateTrajectoryOnMap(trajectory: [number, number][]) {
   const source = map?.getSource('user-trajectory') as mapboxgl.GeoJSONSource;
   if (source) {
